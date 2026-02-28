@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from manim import *
 from manim_slides import Slide
 
@@ -22,11 +24,19 @@ from config import (
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing
+import matplotlib.pyplot as plt
+import pickle
 from decimal import Decimal
 from scipy.signal import find_peaks
 import os
 import json
 from pathlib import Path
+
+from density_and_barcodes import (
+    fit_hdbscan,
+    density_profile_for_cluster,
+    lambda_to_density,
+)
 
 BENCHMARKS_DIR = Path(__file__).parent / "data" / "benchmarks"
 EXTRADATA_DIR = Path(__file__).parent / "data" / "extradata"
@@ -39,6 +49,7 @@ rng_state = np.random.RandomState(42)
 rng_state.shuffle(order)
 base_data = base_data[order]
 data_colormap = data_colormap[order]
+SCALED_BASE_DATA = base_data * (12, 9)
 fly_away = base_data - (
     5,
     5,
@@ -46,100 +57,30 @@ fly_away = base_data - (
 sklearn.preprocessing.normalize(fly_away, copy=False)
 fly_away *= 30
 
+_BENCHMARK_DATASETS = ["cifar", "news", "bird"]
+_BENCHMARK_METRICS = ["ari", "cs", "time"]
+_BENCHMARK_ALGORITHMS = ["kmeans", "umap_hdbscan", "EVoC"]
+_ALGO_DISPLAY_NAMES = {
+    "kmeans": "K-Means",
+    "umap_hdbscan": "UMAP+HDBSCAN",
+    "EVoC": "EVoC",
+}
 
-cifar_ari_kmeans = np.load(BENCHMARKS_DIR / "cifar_ari_kmeans_swarm.npy")
-cifar_ari_umap_hdbscan = np.load(BENCHMARKS_DIR / "cifar_ari_umap_hdbscan_swarm.npy")
-cifar_ari_evoc = np.load(BENCHMARKS_DIR / "cifar_ari_EVoC_swarm.npy")
-cifar_ari_ylim = np.load(BENCHMARKS_DIR / "cifar_ari_ylim.npy")
-cifar_ari_yticks = np.load(BENCHMARKS_DIR / "cifar_ari_yticks.npy")
-cifar_cs_kmeans = np.load(BENCHMARKS_DIR / "cifar_cs_kmeans_swarm.npy")
-cifar_cs_umap_hdbscan = np.load(BENCHMARKS_DIR / "cifar_cs_umap_hdbscan_swarm.npy")
-cifar_cs_evoc = np.load(BENCHMARKS_DIR / "cifar_cs_EVoC_swarm.npy")
-cifar_cs_ylim = np.load(BENCHMARKS_DIR / "cifar_cs_ylim.npy")
-cifar_cs_yticks = np.load(BENCHMARKS_DIR / "cifar_cs_yticks.npy")
-cifar_time_kmeans = np.load(BENCHMARKS_DIR / "cifar_time_kmeans_swarm.npy")
-cifar_time_umap_hdbscan = np.load(BENCHMARKS_DIR / "cifar_time_umap_hdbscan_swarm.npy")
-cifar_time_evoc = np.load(BENCHMARKS_DIR / "cifar_time_EVoC_swarm.npy")
-cifar_time_ylim = np.load(BENCHMARKS_DIR / "cifar_time_ylim.npy")
-cifar_time_yticks = np.load(BENCHMARKS_DIR / "cifar_time_yticks.npy")
+benchmark_data = {}
+for _ds in _BENCHMARK_DATASETS:
+    benchmark_data[_ds] = {}
+    for _metric in _BENCHMARK_METRICS:
+        benchmark_data[_ds][_metric] = {
+            "swarms": {
+                _ALGO_DISPLAY_NAMES[algo]: np.load(
+                    BENCHMARKS_DIR / f"{_ds}_{_metric}_{algo}_swarm.npy"
+                )
+                for algo in _BENCHMARK_ALGORITHMS
+            },
+            "ylim": np.load(BENCHMARKS_DIR / f"{_ds}_{_metric}_ylim.npy"),
+            "yticks": np.load(BENCHMARKS_DIR / f"{_ds}_{_metric}_yticks.npy"),
+        }
 
-news_ari_kmeans = np.load(BENCHMARKS_DIR / "news_ari_kmeans_swarm.npy")
-news_ari_umap_hdbscan = np.load(BENCHMARKS_DIR / "news_ari_umap_hdbscan_swarm.npy")
-news_ari_evoc = np.load(BENCHMARKS_DIR / "news_ari_EVoC_swarm.npy")
-news_ari_ylim = np.load(BENCHMARKS_DIR / "news_ari_ylim.npy")
-news_ari_yticks = np.load(BENCHMARKS_DIR / "news_ari_yticks.npy")
-news_cs_kmeans = np.load(BENCHMARKS_DIR / "news_cs_kmeans_swarm.npy")
-news_cs_umap_hdbscan = np.load(BENCHMARKS_DIR / "news_cs_umap_hdbscan_swarm.npy")
-news_cs_evoc = np.load(BENCHMARKS_DIR / "news_cs_EVoC_swarm.npy")
-news_cs_ylim = np.load(BENCHMARKS_DIR / "news_cs_ylim.npy")
-news_cs_yticks = np.load(BENCHMARKS_DIR / "news_cs_yticks.npy")
-news_time_kmeans = np.load(BENCHMARKS_DIR / "news_time_kmeans_swarm.npy")
-news_time_umap_hdbscan = np.load(BENCHMARKS_DIR / "news_time_umap_hdbscan_swarm.npy")
-news_time_evoc = np.load(BENCHMARKS_DIR / "news_time_EVoC_swarm.npy")
-news_time_ylim = np.load(BENCHMARKS_DIR / "news_time_ylim.npy")
-news_time_yticks = np.load(BENCHMARKS_DIR / "news_time_yticks.npy")
-
-bird_ari_kmeans = np.load(BENCHMARKS_DIR / "bird_ari_kmeans_swarm.npy")
-bird_ari_umap_hdbscan = np.load(BENCHMARKS_DIR / "bird_ari_umap_hdbscan_swarm.npy")
-bird_ari_evoc = np.load(BENCHMARKS_DIR / "bird_ari_EVoC_swarm.npy")
-bird_ari_ylim = np.load(BENCHMARKS_DIR / "bird_ari_ylim.npy")
-bird_ari_yticks = np.load(BENCHMARKS_DIR / "bird_ari_yticks.npy")
-bird_cs_kmeans = np.load(BENCHMARKS_DIR / "bird_cs_kmeans_swarm.npy")
-bird_cs_umap_hdbscan = np.load(BENCHMARKS_DIR / "bird_cs_umap_hdbscan_swarm.npy")
-bird_cs_evoc = np.load(BENCHMARKS_DIR / "bird_cs_EVoC_swarm.npy")
-bird_cs_ylim = np.load(BENCHMARKS_DIR / "bird_cs_ylim.npy")
-bird_cs_yticks = np.load(BENCHMARKS_DIR / "bird_cs_yticks.npy")
-bird_time_kmeans = np.load(BENCHMARKS_DIR / "bird_time_kmeans_swarm.npy")
-bird_time_umap_hdbscan = np.load(BENCHMARKS_DIR / "bird_time_umap_hdbscan_swarm.npy")
-bird_time_evoc = np.load(BENCHMARKS_DIR / "bird_time_EVoC_swarm.npy")
-bird_time_ylim = np.load(BENCHMARKS_DIR / "bird_time_ylim.npy")
-bird_time_yticks = np.load(BENCHMARKS_DIR / "bird_time_yticks.npy")
-
-cifar_ari_swarms = {
-    "K-Means": cifar_ari_kmeans,
-    "UMAP+HDBSCAN": cifar_ari_umap_hdbscan,
-    "EVoC": cifar_ari_evoc,
-}
-cifar_cs_swarms = {
-    "K-Means": cifar_cs_kmeans,
-    "UMAP+HDBSCAN": cifar_cs_umap_hdbscan,
-    "EVoC": cifar_cs_evoc,
-}
-cifar_time_swarms = {
-    "K-Means": cifar_time_kmeans,
-    "UMAP+HDBSCAN": cifar_time_umap_hdbscan,
-    "EVoC": cifar_time_evoc,
-}
-news_ari_swarms = {
-    "K-Means": news_ari_kmeans,
-    "UMAP+HDBSCAN": news_ari_umap_hdbscan,
-    "EVoC": news_ari_evoc,
-}
-news_cs_swarms = {
-    "K-Means": news_cs_kmeans,
-    "UMAP+HDBSCAN": news_cs_umap_hdbscan,
-    "EVoC": news_cs_evoc,
-}
-news_time_swarms = {
-    "K-Means": news_time_kmeans,
-    "UMAP+HDBSCAN": news_time_umap_hdbscan,
-    "EVoC": news_time_evoc,
-}
-bird_ari_swarms = {
-    "K-Means": bird_ari_kmeans,
-    "UMAP+HDBSCAN": bird_ari_umap_hdbscan,
-    "EVoC": bird_ari_evoc,
-}
-bird_cs_swarms = {
-    "K-Means": bird_cs_kmeans,
-    "UMAP+HDBSCAN": bird_cs_umap_hdbscan,
-    "EVoC": bird_cs_evoc,
-}
-bird_time_swarms = {
-    "K-Means": bird_time_kmeans,
-    "UMAP+HDBSCAN": bird_time_umap_hdbscan,
-    "EVoC": bird_time_evoc,
-}
 SWARM_COLORS = {
     "K-Means": DEFAULT_COLOR,
     "UMAP+HDBSCAN": ACCENT_COLOR,
@@ -158,6 +99,15 @@ knn_graph_embedding_raw_data -= knn_graph_embedding_raw_data.mean(axis=0)
 knn_graph_embedding_2d_data = np.load("embedding_cartoon_2d_data.npy")
 knn_graph_embedding_edges = pd.read_csv("embedding_cartoon_edges.csv")
 knn_graph_embedding_2d_data -= np.floor(knn_graph_embedding_2d_data.min(axis=0))
+
+
+def colormap_color(value, vmin, vmax, cmap_name="plasma", power=1.0, invert=False):
+    """Map a scalar value to a manim color via a matplotlib colormap."""
+    normalized = (value - vmin) / (vmax - vmin)
+    if invert:
+        normalized = 1.0 - normalized
+    rgba = plt.get_cmap(cmap_name)(normalized**power)
+    return rgb_to_color(rgba[:3])
 
 
 def descendants(binary_tree, idx):
@@ -192,6 +142,119 @@ def is_active_cluster(cluster_num, binary_tree, cluster_sizes, minimum_cluster_s
         return is_active_cluster(left, binary_tree, cluster_sizes, minimum_cluster_size)
     else:
         return False
+
+
+def _create_curved_annotation(
+    scene, text_content, text_shift, arrow_mob, mid_offsets, tip_angle_offset
+):
+    """Create a curved annotation arrow pointing from text at bottom to an arrow mob.
+
+    Parameters
+    ----------
+    scene : Scene
+        The manim scene (for add_fixed_in_frame_mobjects / play).
+    text_content : str
+        Paragraph text content (may include newlines).
+    text_shift : np.ndarray
+        Shift applied after ``.to_edge(DOWN)``.
+    arrow_mob : Mobject
+        The arrow whose centre the curve points toward.
+    mid_offsets : tuple[np.ndarray, np.ndarray]
+        ``(text_top_mid_offset, arrow_center_mid_offset)`` – the two
+        middle control-point offsets for the smooth curve.
+    tip_angle_offset : float
+        Angle adjustment for the StealthTip (radians).
+    """
+    color = COLOR_CYCLE[3]
+    text = Paragraph(
+        text_content,
+        font_size=24,
+        alignment="center",
+        color=color,
+        stroke_color=color,
+    )
+    text.to_edge(DOWN).shift(text_shift)
+
+    curve_points = [
+        text.get_top() + UP * 0.2,
+        text.get_top() + mid_offsets[0],
+        arrow_mob.get_center() + mid_offsets[1],
+        arrow_mob.get_center() + DOWN * 0.25,
+    ]
+
+    curved_path = VMobject(color=color, stroke_width=4)
+    curved_path.set_points_smoothly(curve_points)
+
+    tip = StealthTip(color=color)
+    tip.move_to(curve_points[-1])
+    direction = curve_points[-1] - curve_points[-2]
+    angle = np.arctan2(direction[1], direction[0]) + tip_angle_offset
+    tip.rotate(angle)
+
+    arrow_group = VGroup(curved_path, tip)
+
+    scene.add_fixed_in_frame_mobjects(arrow_group)
+    scene.play(Create(curved_path), GrowFromCenter(tip))
+    scene.add_fixed_in_frame_mobjects(text)
+    scene.play(Write(text))
+
+    return text, arrow_group
+
+
+def _build_density_polygons(
+    axes, density_profiles, cluster_sizes, x_values, color_func, positive_only_min=False
+):
+    """Build filled polygons from cluster density profiles.
+
+    Parameters
+    ----------
+    axes : Axes
+        Manim axes for coordinate conversion.
+    density_profiles : np.ndarray
+        2-D array  (n_clusters, n_points).
+    cluster_sizes : array-like
+        Size of each cluster.
+    x_values : np.ndarray
+        X-axis values matching the profile columns.
+    color_func : callable(int) -> ManimColor
+        Maps cluster index to a fill colour.
+    positive_only_min : bool
+        If True, compute y_min from positive values only.
+
+    Returns
+    -------
+    polygons : list[Polygon]
+    polygon_sizes : list
+    """
+    polygons = []
+    polygon_sizes = []
+    for i, y_values in enumerate(density_profiles):
+        y_min = (
+            np.min(y_values[y_values > 0]) if positive_only_min else np.min(y_values)
+        )
+        if np.sum(y_values > y_min):
+            indices = np.where(y_values > y_min)[0]
+            start, end = indices[0], indices[-1]
+            curve_pts = [
+                axes.c2p(x_values[j], y_values[j]) for j in range(start, end + 1)
+            ]
+            bottom_right = axes.c2p(x_values[end], y_min)
+            bottom_left = axes.c2p(x_values[start], y_min)
+            polygons.append(
+                Polygon(
+                    *curve_pts,
+                    bottom_right,
+                    bottom_left,
+                    stroke_width=0,
+                    fill_opacity=1.0,
+                    color=color_func(i),
+                )
+            )
+            polygon_sizes.append(cluster_sizes[i])
+        else:
+            polygons.append(Polygon((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+            polygon_sizes.append(cluster_sizes[i])
+    return polygons, polygon_sizes
 
 
 class PersistenceBarcode(VGroup):
@@ -310,102 +373,7 @@ class PersistenceBarcode(VGroup):
 apply_defaults()
 
 
-# class DistortionLenses(TIMCSlide):
-
-#     max_duration_before_split_reverse = None
-
-#     def _move_points(self, new_locations, run_time=4.0):
-#         animations = []
-#         for i, dot in enumerate(self.dots):
-#             new_point = self.graph.coords_to_point(*new_locations[i].tolist())
-#             animations.append(dot.animate.move_to(new_point))
-
-#         self.play(*animations, run_time=run_time)
-
-#     def construct(self):
-#         add_logo_to_background(self)
-
-#         self.graph = Axes(
-#             x_range=[-2, 12, 1],
-#             y_range=[-2, 12, 1],
-#             x_length=9,
-#             y_length=6,
-#             axis_config={"include_tip": True, "color": DEFAULT_COLOR},
-#         )
-#         labels = self.graph.get_axis_labels()
-#         # self.add(graph, labels)
-
-#         x_data, y_data = base_data.T
-
-#         # Create dots for each point
-#         self.dots = VGroup()
-#         for x, y in zip(x_data, y_data):
-#             # Convert data coordinates to screen coordinates
-#             point = self.graph.coords_to_point(x, y)
-#             dot = Dot(
-#                 point=point,
-#                 radius=0.025,  # Adjust size
-#                 color=ACCENT_COLOR,
-#                 stroke_width=0.5,
-#                 stroke_color=BACKGROUND_COLOR,
-#             )
-#             self.dots.add(dot)
-
-#         # self.add(graph, labels)
-#         init_text = Text("Suppose we have some data...")
-#         self.play(Write(init_text))
-#         self.play(
-#             FadeOut(init_text, run_time=1.0),
-#             LaggedStart(
-#                 *[FadeIn(dot, scale=0.25) for dot in self.dots], lag_ratio=0.001
-#             ),
-#         )
-
-#         self.marked_next_slide()
-
-#         text1 = self.add_title_text(
-#             "Add colour so we can track points...", font_size=32
-#         )
-
-#         animations = []
-#         for i, dot in enumerate(self.dots):
-#             animations.append(dot.animate.set_fill_color(data_colormap[i]))
-
-#         self.play(LaggedStart(*animations, lag_ratio=0.001), run_time=1.0)
-#         self.play(FadeOut(text1))
-
-#         self.marked_next_slide()
-
-#         text2 = self.add_title_text("As viewed through the lens of a GMM", font_size=40)
-#         self._move_points(gmm_distortion)
-#         self.play(FadeOut(text2))
-
-#         self.marked_next_slide()
-#         self._move_points(base_data)
-
-#         self.marked_next_slide()
-
-#         text3 = self.add_title_text(
-#             "As viewed through the lens of K-Means", font_size=40
-#         )
-#         self._move_points(kmeans_distortion)
-#         self.play(FadeOut(text3))
-
-#         self.marked_next_slide()
-#         self._move_points(base_data)
-
-#         self.marked_next_slide()
-#         self._move_points(fly_away, run_time=1.0)
-
-#         self.add_centered_text(
-#             "All clustering algorithms distort data based on their internal view of the data!"
-#         )
-
-
 class EVoCPerformance(TIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
         self.load_state("benefits")
@@ -413,7 +381,6 @@ class EVoCPerformance(TIMCSlide):
         self.new_section("EVōC Performance")
 
         # 1. Configuration for the 3 distinct datasets
-        # We map the global variables loaded at the top of slides.py into this structure
         datasets = [
             {
                 "name_lines": [
@@ -424,12 +391,18 @@ class EVoCPerformance(TIMCSlide):
                     "CLIP",
                 ],
                 "data": {
-                    "ARI": (cifar_ari_swarms, cifar_ari_yticks),
+                    "ARI": (
+                        benchmark_data["cifar"]["ari"]["swarms"],
+                        benchmark_data["cifar"]["ari"]["yticks"],
+                    ),
                     "Score": (
-                        cifar_cs_swarms,
-                        cifar_ari_yticks,
-                    ),  # Note: using ari_yticks for range reference if needed, or specific ones
-                    "Time": (cifar_time_swarms, cifar_time_yticks),
+                        benchmark_data["cifar"]["cs"]["swarms"],
+                        benchmark_data["cifar"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["cifar"]["time"]["swarms"],
+                        benchmark_data["cifar"]["time"]["yticks"],
+                    ),
                 },
             },
             {
@@ -441,12 +414,18 @@ class EVoCPerformance(TIMCSlide):
                     "mpnet-base-v2",
                 ],
                 "data": {
-                    "ARI": (news_ari_swarms, news_ari_yticks),
+                    "ARI": (
+                        benchmark_data["news"]["ari"]["swarms"],
+                        benchmark_data["news"]["ari"]["yticks"],
+                    ),
                     "Score": (
-                        news_cs_swarms,
-                        news_ari_yticks,
-                    ),  # Adjust if news_cs_yticks exists
-                    "Time": (news_time_swarms, news_time_yticks),
+                        benchmark_data["news"]["cs"]["swarms"],
+                        benchmark_data["news"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["news"]["time"]["swarms"],
+                        benchmark_data["news"]["time"]["yticks"],
+                    ),
                 },
             },
             {
@@ -460,9 +439,18 @@ class EVoCPerformance(TIMCSlide):
                     "Classifier",
                 ],
                 "data": {
-                    "ARI": (bird_ari_swarms, bird_ari_yticks),
-                    "Score": (bird_cs_swarms, bird_ari_yticks),
-                    "Time": (bird_time_swarms, bird_time_yticks),
+                    "ARI": (
+                        benchmark_data["bird"]["ari"]["swarms"],
+                        benchmark_data["bird"]["ari"]["yticks"],
+                    ),
+                    "Score": (
+                        benchmark_data["bird"]["cs"]["swarms"],
+                        benchmark_data["bird"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["bird"]["time"]["swarms"],
+                        benchmark_data["bird"]["time"]["yticks"],
+                    ),
                 },
             },
         ]
@@ -630,262 +618,7 @@ class EVoCPerformance(TIMCSlide):
         return animations
 
 
-# class EVoCRevealPolished(TIMCSlide):
-#     def construct(self):
-#         add_logo_to_background(self)
-#         # Step 1: Centered "EVōC"
-#         title = Text("EVōC", font_size=72)
-#         self.play(Write(title))
-#         self.wait()
-
-#         # Step 2: Create individual letter mobjects
-#         letters_data = [
-#             ("E", "mbedding"),
-#             ("V", "ector"),
-#             ("ō", "riented"),
-#             ("C", "lustering"),
-#         ]
-
-#         # Create separate letter objects
-#         E = Text("E", font_size=72)
-#         V = Text("V", font_size=72)
-#         o = Text("ō", font_size=72)
-#         C = Text("C", font_size=72)
-
-#         letters = VGroup(E, V, o, C).arrange(RIGHT, buff=0.5)
-#         letters.move_to(ORIGIN)
-#         o.shift(LEFT * 0.05)
-
-#         # Step 3: Stack vertically
-#         vertical_spacing = 1.25
-#         target_positions = [
-#             [0, vertical_spacing * 1.5, 0],
-#             [0, vertical_spacing * 0.5, 0],
-#             [0, -vertical_spacing * 0.5, 0],
-#             [0, -vertical_spacing * 1.5, 0],
-#         ]
-
-#         animations = []
-#         for letter, pos in zip(letters, target_positions):
-#             animations.append(letter.animate.move_to(pos))
-
-#         # Transform title into separate letters
-#         self.play(ReplacementTransform(title, letters))
-#         self.play(*animations, run_time=1.5)
-#         self.wait(0.5)
-
-#         # Step 4: Create full words to get proper alignment reference
-#         # We'll create the full words, then extract positioning
-#         full_E = Text("Embedding", font_size=72)
-#         full_V = Text("Vector", font_size=72)
-#         full_o = Text("ōriented", font_size=72)
-#         full_C = Text("Clustering", font_size=72)
-
-#         # Create just the trailing parts
-#         embedding_rest = Text("mbedding", font_size=72)
-#         vector_rest = Text("ector", font_size=72)
-#         oriented_rest = Text("riented", font_size=72)
-#         clustering_rest = Text("lustering", font_size=72)
-
-#         # Calculate the shift needed to center
-#         temp_group = VGroup(
-#             full_E,
-#             full_V,
-#             full_o,
-#             full_C,
-#         )
-#         shift_left = -temp_group.get_left()[0] * LEFT
-
-#         # Animate everything together
-#         self.play(
-#             E.animate.shift(shift_left),
-#             V.animate.shift(shift_left),
-#             o.animate.shift(shift_left),
-#             C.animate.shift(shift_left),
-#         )
-#         # Position the rest aligned to the bottom (baseline) of the letters
-#         # Use align_to to match the bottom edge
-#         embedding_rest.next_to(E, RIGHT, buff=0.05)
-#         embedding_rest.align_to(E, UP)
-
-#         vector_rest.next_to(V, RIGHT, buff=-0.05)
-#         vector_rest.align_to(V, DOWN)
-
-#         oriented_rest.next_to(o, RIGHT, buff=0.075)
-#         oriented_rest.align_to(o, DOWN)
-
-#         clustering_rest.next_to(C, RIGHT, buff=0.05)
-#         clustering_rest.align_to(C, UP)
-
-#         self.play(
-#             Write(embedding_rest),
-#             Write(vector_rest),
-#             Write(oriented_rest),
-#             Write(clustering_rest),
-#             run_time=2,
-#         )
-#         self.marked_next_slide()
-
-
-# class OpenClusteringBox(ThreeDTIMCSlide):
-
-#     max_duration_before_split_reverse = None
-
-#     def construct(self):
-#         add_logo_to_background(self)
-#         self.new_section("Data Distortion")
-#         self.set_camera_orientation(phi=75 * DEGREES, theta=70 * DEGREES)
-
-#         # 2D labels that stay fixed
-#         title = Text("Opening up a clustering algorithm", font_size=40)
-#         # title.to_edge(UP)
-#         self.add_fixed_in_frame_mobjects(title)
-
-#         # Animate
-#         self.play(Write(title))
-#         self.marked_next_slide()
-
-#         self.play(title.animate.move_to(UP * 3))
-
-#         # 3D cube
-#         cube = Cube(side_length=2, fill_opacity=1, stroke_width=2)
-#         cube.set_fill(DARK_GRAY)
-#         cube.set_stroke(WHITE)
-
-#         # Create label
-#         label = Paragraph(
-#             "Clustering\nAlgorithm",
-#             font_size=32,
-#             color=WHITE,
-#             stroke_color="white",
-#             alignment="center",
-#         )
-
-#         # Position on the front face and rotate to align with face
-#         label.rotate(PI / 2, axis=RIGHT)  # Rotate to be upright in 3D
-#         label.rotate(PI, axis=OUT)  # Face forward
-#         label.move_to(cube.get_center() + UP)  # Position in front
-
-#         input_arrow = Arrow(
-#             start=LEFT * (5 - 7 / 8),
-#             end=LEFT * (1.5 + 7 / 8),
-#             color=ACCENT_COLOR,
-#             stroke_width=30,
-#             max_tip_length_to_length_ratio=25.0,
-#             max_stroke_width_to_length_ratio=10,
-#             buff=0,
-#         ).scale(2, scale_tips=True)
-#         input_label = Text("Input", font_size=32)
-#         input_label.next_to(input_arrow, UP)
-#         self.add_fixed_in_frame_mobjects(input_arrow, input_label)
-#         self.play(GrowArrow(input_arrow), Write(input_label))
-
-#         self.play(GrowFromCenter(cube))
-#         self.play(Write(label))
-
-#         output_arrow = Arrow(
-#             start=RIGHT * (1.5 + 7 / 8),
-#             end=RIGHT * (5 - 7 / 8),
-#             color=ACCENT_COLOR,
-#             stroke_width=30,
-#             max_tip_length_to_length_ratio=15,
-#             max_stroke_width_to_length_ratio=10.0,
-#             buff=0,
-#         ).scale(2, scale_tips=True)
-#         output_label = Text("Output", font_size=32)
-#         output_label.next_to(output_arrow, UP)
-#         self.add_fixed_in_frame_mobjects(output_arrow, output_label)
-#         self.play(GrowArrow(output_arrow), Write(output_label))
-#         self.marked_next_slide()
-
-#         left_half = Prism(dimensions=[1, 2, 2])
-#         left_half.set_fill(DARK_GRAY, opacity=1)
-#         left_half.set_stroke(WHITE, width=2)
-#         left_half.move_to(LEFT * 0.5)
-
-#         right_half = Prism(dimensions=[1, 2, 2])
-#         right_half.set_fill(DARK_GRAY, opacity=1)
-#         right_half.set_stroke(WHITE, width=2)
-#         right_half.move_to(RIGHT * 0.5)
-
-#         self.play(FadeOut(label))
-#         self.remove(cube)
-#         self.add(left_half, right_half)
-
-#         # New arrows
-#         input_arrow_short = Arrow(
-#             start=LEFT * (5 - 5 / 8),
-#             end=LEFT * (2.5 + 5 / 8),
-#             color=ACCENT_COLOR,
-#             stroke_width=30,
-#             max_tip_length_to_length_ratio=25.0,
-#             max_stroke_width_to_length_ratio=10,
-#             buff=0,
-#         ).scale(2, scale_tips=True)
-#         input_label_short = Text("Input", font_size=32)
-#         input_label_short.next_to(input_arrow_short, UP).shift(LEFT * 0.25)
-#         output_arrow_short = Arrow(
-#             start=RIGHT * (2.5 + 5 / 8),
-#             end=RIGHT * (5 - 5 / 8),
-#             color=ACCENT_COLOR,
-#             stroke_width=30,
-#             max_tip_length_to_length_ratio=15,
-#             max_stroke_width_to_length_ratio=10.0,
-#             buff=0,
-#         ).scale(2, scale_tips=True)
-#         output_label_short = Text("Output", font_size=32)
-#         output_label_short.next_to(output_arrow, UP).shift(RIGHT * 0.25)
-#         self.play(
-#             left_half.animate.shift(LEFT * 0.8),
-#             right_half.animate.shift(RIGHT * 0.8),
-#             Transform(input_arrow, input_arrow_short),
-#             Transform(input_label, input_label_short),
-#             Transform(output_arrow, output_arrow_short),
-#             Transform(output_label, output_label_short),
-#             run_time=2,
-#         )
-
-#         # Add curved annotation arrow pointing to the gap
-#         annotation_text = Paragraph(
-#             "Visualize a canonical example\nof the internal representation",
-#             font_size=32,
-#             alignment="center",
-#             color=COLOR_CYCLE[3],
-#             stroke_color=COLOR_CYCLE[3],
-#         )
-#         annotation_text.to_edge(DOWN).shift(RIGHT * 1.5)
-#         curve_points = [
-#             annotation_text.get_top() + UP * 0.2,
-#             annotation_text.get_top() + UP * 1.5 + LEFT * 0.5,
-#             DOWN + LEFT * 0.1,
-#             ORIGIN,
-#         ]
-
-#         # Use VMobject to create custom curve
-#         curved_path = VMobject(color=COLOR_CYCLE[3], stroke_width=8)
-#         curved_path.set_points_smoothly(curve_points)
-
-#         # Add tip
-#         tip = StealthTip(color=COLOR_CYCLE[3]).scale(2)
-#         tip.move_to(curve_points[-1])
-#         # Orient the tip
-#         direction = curve_points[-1] - curve_points[-2]
-#         angle = np.arctan2(direction[1], direction[0]) - 18 * DEGREES
-#         tip.rotate(angle)
-
-#         annotation = VGroup(curved_path, tip)
-
-#         self.add_fixed_in_frame_mobjects(annotation)
-#         self.play(Create(curved_path), GrowFromCenter(tip))
-#         self.add_fixed_in_frame_mobjects(annotation_text)
-#         self.play(Write(annotation_text))
-#         self.marked_next_slide()
-
-
 class PersistenceBarcodeAnimation(TIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
         # add_logo_to_background(self)
@@ -1222,9 +955,6 @@ class PersistenceBarcodeAnimation(TIMCSlide):
 
 class DensityToBarcode(TIMCSlide):
 
-    max_duration_before_split_reverse = None
-    skip_reversing = True
-
     def construct(self):
 
         # self.load_state("sorting_density")
@@ -1270,41 +1000,19 @@ class DensityToBarcode(TIMCSlide):
         polygon_color_gradient = color_gradient(
             [DEFAULT_COLOR, ACCENT_COLOR, WHITE], 100
         )
-        for i, y_values in enumerate(cluster_density_profiles):
-            y_min = np.min(y_values)
-            if np.sum(y_values > y_min):
-                indices = np.where(y_values > y_min)[0]
-                start, end = indices[0], indices[-1]
-                curve_pts = [
-                    self.density_axes.c2p(x_values[i], y_values[i])
-                    for i in range(start, end + 1)
-                ]
-                bottom_right = self.density_axes.c2p(x_values[end], y_min)
-                bottom_left = self.density_axes.c2p(x_values[start], y_min)
-                scaled_color_val = 1.0 - np.power(
-                    cluster_sizes[i] / x_values.shape[0], 0.2
-                )
-                color_idx = int(scaled_color_val * 99)
-                color_idx = max(0, min(color_idx, 99))
-                polygons.append(
-                    Polygon(
-                        *curve_pts,
-                        bottom_right,
-                        bottom_left,
-                        stroke_width=0,
-                        fill_opacity=1.0,
-                        color=polygon_color_gradient[color_idx],
-                        # color=interpolate_color(
-                        #     ACCENT_COLOR,
-                        #     DEFAULT_COLOR,
-                        #     np.power(cluster_sizes[i] / x_values.shape[0], 0.25),
-                        # ),
-                    )
-                )
-                polygon_sizes.append(cluster_sizes[i])
-            else:
-                polygons.append(Polygon((0, 0, 0), (0, 0, 0), (0, 0, 0)))
-                polygon_sizes.append(cluster_sizes[i])
+
+        def _gradient_color(idx):
+            scaled = 1.0 - np.power(cluster_sizes[idx] / x_values.shape[0], 0.2)
+            cidx = max(0, min(int(scaled * 99), 99))
+            return polygon_color_gradient[cidx]
+
+        polygons, polygon_sizes = _build_density_polygons(
+            self.density_axes,
+            cluster_density_profiles,
+            cluster_sizes,
+            x_values,
+            _gradient_color,
+        )
 
         self.play(
             LaggedStart(
@@ -1433,41 +1141,13 @@ class DensityToBarcode(TIMCSlide):
             edge=DOWN,
             direction=DOWN,
         )
-        new_polygons = []
-        x_values = np.arange(n_points)
-        for i, y_values in enumerate(cluster_density_profiles):
-            y_min = np.min(y_values)
-            if np.sum(y_values > y_min):
-                indices = np.where(y_values > y_min)[0]
-                start, end = indices[0], indices[-1]
-                curve_pts = [
-                    new_density_axes.c2p(x_values[i], y_values[i])
-                    for i in range(start, end + 1)
-                ]
-                bottom_right = new_density_axes.c2p(x_values[end], y_min)
-                bottom_left = new_density_axes.c2p(x_values[start], y_min)
-                scaled_color_val = 1.0 - np.power(
-                    cluster_sizes[i] / x_values.shape[0], 0.2
-                )
-                color_idx = int(scaled_color_val * 99)
-                color_idx = max(0, min(color_idx, 99))
-                new_polygons.append(
-                    Polygon(
-                        *curve_pts,
-                        bottom_right,
-                        bottom_left,
-                        stroke_width=0,
-                        fill_opacity=1.0,
-                        color=polygon_color_gradient[color_idx],
-                        # color=interpolate_color(
-                        #     ACCENT_COLOR,
-                        #     DEFAULT_COLOR,
-                        #     np.power(cluster_sizes[i] / x_values.shape[0], 0.25),
-                        # ),
-                    )
-                )
-            else:
-                new_polygons.append(Polygon((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+        new_polygons, _ = _build_density_polygons(
+            new_density_axes,
+            cluster_density_profiles,
+            cluster_sizes,
+            np.arange(n_points),
+            _gradient_color,
+        )
 
         new_polygon_group = VGroup(*new_polygons)
         # self.add(new_polygon_group)
@@ -1595,45 +1275,6 @@ class DensityToBarcode(TIMCSlide):
         size_label.add_updater(lambda d: d.next_to(size_marker, DOWN, buff=0.1))
 
         self.play(size_label.animate.set_opacity(1.0), run_time=0.5)
-        # bars = VGroup()
-        # for i, (start, end) in enumerate(barcode_data):
-        #     # Create a line from start to end at height i
-        #     p1 = barcode_axis.c2p(start, i + 0.5)
-        #     p2 = barcode_axis.c2p(end, i + 0.5)
-        #     bar = Line(p1, p2, stroke_width=6)
-        #     # Store the data directly on the mobject for easy access in updater
-        #     bar.birth = start
-        #     bar.death = end
-        #     bar.weight = barcode_weights[i]
-        #     bar.set_color(interpolate_color(WHITE, ACCENT_COLOR, bar.weight))
-        #     bar.set_stroke(opacity=0.0)
-        #     bars.add(bar)
-
-        # # self.play(LaggedStart(*[Create(bar) for bar in bars], lag_ratio=0.1))
-        # self.add(bars)
-
-        # self.marked_next_slide()
-
-        # def update_barcode(bars):
-        #     t = tracker.get_value()
-        #     for i, bar in enumerate(bars):
-        #         endpoint = min(t, bar.death)
-        #         if endpoint > bar.birth:
-        #             bar.put_start_and_end_on(
-        #                 barcode_axis.c2p(bar.birth, i + 0.5),
-        #                 barcode_axis.c2p(endpoint, i + 0.5),
-        #             )
-        #             bar.set_stroke(opacity=1.0)
-        #             if t < bar.death and t > bar.birth:
-        #                 bar.set_color(COLOR_CYCLE[1])
-        #             else:
-        #                 bar.set_color(
-        #                     interpolate_color(WHITE, ACCENT_COLOR, bar.weight)
-        #                 )
-        #         else:
-        #             bar.set_stroke(opacity=0.0)
-
-        # bars.add_updater(update_barcode)
         new_polygon_group.add_updater(update_polygons)
 
         self.play(
@@ -1658,18 +1299,6 @@ class DensityToBarcode(TIMCSlide):
             x_axis_config={"include_numbers": False, "tip_shape": StealthTip},
         ).move_to([0.0, 0.93294936, 0.0])
 
-        # new_bars = VGroup()
-        # for i, (start, end) in enumerate(barcode_data):
-        #     # Create a line from start to end at height i
-        #     p1 = ax_top.c2p(start, i + 0.5)
-        #     p2 = ax_top.c2p(end, i + 0.5)
-        #     bar = Line(p1, p2, stroke_width=8)
-        #     # Store the data directly on the mobject for easy access in updater
-        #     bar.birth = start
-        #     bar.death = end
-        #     bar.weight = barcode_weights[i]
-        #     bar.set_color(interpolate_color(WHITE, ACCENT_COLOR, bar.weight))
-        #     new_bars.add(bar)
         new_barcode = PersistenceBarcode(ax_top, barcode_data, barcode_weights)
 
         self.play(
@@ -1685,15 +1314,11 @@ class DensityToBarcode(TIMCSlide):
         )
         self.play(
             ReplacementTransform(barcode_axis, ax_top),
-            # ReplacementTransform(bars, new_bars),
             ReplacementTransform(barcode, new_barcode),
         )
 
 
 class KnnEmbeddingStep(ThreeDTIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
 
@@ -2046,9 +1671,6 @@ class KnnEmbeddingStep(ThreeDTIMCSlide):
 
 class SortingDensity(ThreeDTIMCSlide):
 
-    max_duration_before_split_reverse = None
-    skip_reversing = True
-
     def _data_to_screen_distance(self, data_dist):
         point1 = self.graph.c2p(0, 0)
         point2 = self.graph.c2p(data_dist, 0)
@@ -2067,7 +1689,7 @@ class SortingDensity(ThreeDTIMCSlide):
         self.marked_next_slide()
         self.clear_slide(run_time=1)
 
-        scaled_base_data = base_data * (12, 9)
+        scaled_base_data = SCALED_BASE_DATA
 
         self.graph = Axes(
             x_range=[-2, 12, 1],
@@ -2227,16 +1849,6 @@ class SortingDensity(ThreeDTIMCSlide):
         min_dist = np.min(core_distances_all)
         max_dist = np.max(core_distances_all)
 
-        def get_color_from_distance(dist):
-            # Normalize distance to [0, 1]
-            normalized = (dist - min_dist) / (max_dist - min_dist)
-            # Use matplotlib's colormap (viridis or plasma)
-            import matplotlib.pyplot as plt
-
-            cmap = plt.get_cmap("plasma")  # or 'plasma'
-            rgba = cmap((1.0 - normalized) ** 4)
-            return rgb_to_color(rgba[:3])
-
         core_circles = VGroup()
         for i, dot in enumerate(self.dots):
             # if i == 2258:
@@ -2263,7 +1875,10 @@ class SortingDensity(ThreeDTIMCSlide):
         self.play(
             *[
                 circle.animate.set_stroke(
-                    width=2, color=get_color_from_distance(circle.get_radius())
+                    width=2,
+                    color=colormap_color(
+                        circle.get_radius(), min_dist, max_dist, power=4.0, invert=True
+                    ),
                 )
                 for circle in core_circles
             ],
@@ -2304,28 +1919,9 @@ class SortingDensity(ThreeDTIMCSlide):
         self.play(self.dots.animate.set_opacity(1.0))
         self.wait(0.5)
 
-        def pdf_order(cluster_tree, current_node):
-            children = cluster_tree[cluster_tree["parent"] == current_node]["child"]
-            if len(children) == 0:
-                return [
-                    current_node,
-                ]
-            else:
-                sorted_children = np.concatenate([children[0::2], children[1::2][::-1]])
-                return sum(
-                    [pdf_order(cluster_tree, child) for child in sorted_children], []
-                )
-
-        import hdbscan
-
-        model = hdbscan.HDBSCAN(
-            min_samples=5,
-            min_cluster_size=int(2),
-            cluster_selection_method="leaf",
-            approx_min_span_tree=False,
-        ).fit(scaled_base_data)
-        ctree = model.condensed_tree_.to_numpy()
-        points_in_pdf_order = pdf_order(ctree, ctree["parent"].min())
+        _, ctree, points_in_pdf_order = fit_hdbscan(
+            scaled_base_data, min_cluster_size=2, approx_min_span_tree=False
+        )
 
         pdf_order_of_points = np.argsort(points_in_pdf_order)
 
@@ -2378,84 +1974,6 @@ class SortingDensity(ThreeDTIMCSlide):
             )
         )
 
-        def descendant_points(ctree, cluster_num):
-            result = ctree["child"][
-                (ctree["parent"] == cluster_num) & (ctree["child_size"] == 1)
-            ].tolist()
-            child_clusters = ctree["child"][
-                (ctree["parent"] == cluster_num) & (ctree["child_size"] > 1)
-            ]
-            for c in child_clusters:
-                result.extend(descendant_points(ctree, c))
-            return result
-
-        def find_permutation(arr1, arr2):
-            n = len(arr1)
-            permutation = np.empty(n, dtype=int)
-            value_indices = {}
-            for i, val in enumerate(arr1):
-                if val not in value_indices:
-                    value_indices[val] = []
-                value_indices[val].append(i)
-            for i, val in enumerate(arr2):
-                permutation[i] = value_indices[val].pop(0)
-
-            return permutation
-
-        def density_profile_for_cluster(ctree, cluster_num, order):
-            subtree = ctree[ctree["parent"] == cluster_num]
-            singleton_children = subtree[subtree["child_size"] == 1]
-            cluster_profile = np.vstack(
-                [
-                    singleton_children["child"],
-                    np.exp(-1.0 / singleton_children["lambda_val"]),
-                ]
-            ).T
-            cluster_children = subtree[subtree["child_size"] > 1]
-            extra_cluster_profiles = []
-            for row in cluster_children:
-                points = descendant_points(ctree, row["child"])
-                extra_cluster_profiles.append(
-                    np.vstack(
-                        [
-                            points,
-                            np.full(len(points), np.exp(-1.0 / row["lambda_val"])),
-                        ]
-                    ).T
-                )
-            cluster_profile = np.vstack([cluster_profile] + extra_cluster_profiles)
-            size = cluster_profile.shape[0]
-            missing_indices = np.setdiff1d(
-                np.arange(order.shape[0]), cluster_profile.T[0].astype(np.int32)
-            )
-            parent_row = ctree[ctree["child"] == cluster_num]
-            if len(parent_row) == 1:
-                min_val = np.exp(-1.0 / parent_row["lambda_val"])
-            else:
-                min_val = 0.0
-            cluster_profile = np.vstack(
-                [
-                    cluster_profile,
-                    np.vstack(
-                        [missing_indices, np.full(missing_indices.shape[0], min_val)]
-                    ).T,
-                ]
-            )
-            cluster_profile_final = cluster_profile[
-                find_permutation(cluster_profile.T[0].astype(np.int32), order)
-            ]
-            return cluster_profile_final.T[1], size
-
-        def get_color_from_size(size):
-            # Normalize distance to [0, 1]
-            normalized = (size - 2) / (base_data.shape[0] - 2)
-            # Use matplotlib's colormap (viridis or plasma)
-            import matplotlib.pyplot as plt
-
-            cmap = plt.get_cmap("plasma")  # or 'plasma'
-            rgba = cmap((1.0 - normalized) ** 8)
-            return rgb_to_color(rgba[:3])
-
         cluster_tree = ctree[ctree["child_size"] > 1]
         clusters = np.unique(np.hstack([cluster_tree["parent"], cluster_tree["child"]]))
 
@@ -2463,7 +1981,7 @@ class SortingDensity(ThreeDTIMCSlide):
         sizes = []
         for c in clusters:
             profile, size = density_profile_for_cluster(
-                ctree, c, np.array(points_in_pdf_order)
+                ctree, c, np.array(points_in_pdf_order), lambda_scale=1.0
             )
             profiles.append(profile)
             sizes.append(size)
@@ -2471,39 +1989,21 @@ class SortingDensity(ThreeDTIMCSlide):
         local_cluster_density_profiles = np.vstack(profiles)
         local_cluster_sizes = np.asarray(sizes)
 
-        polygons = VGroup()
-        polygon_sizes = []
-        x_values = np.linspace(0, 1, base_data.shape[0])
-        for i, y_values in enumerate(local_cluster_density_profiles):
-            y_min = np.min(y_values[y_values > 0])
-            if np.sum(y_values > y_min):
-                indices = np.where(y_values > y_min)[0]
-                start, end = indices[0], indices[-1]
-                curve_pts = [
-                    density_axes.c2p(x_values[i], y_values[i])
-                    for i in range(start, end + 1)
-                ]
-                bottom_right = density_axes.c2p(x_values[end], y_min)
-                bottom_left = density_axes.c2p(x_values[start], y_min)
-                polygons.add(
-                    Polygon(
-                        *curve_pts,
-                        bottom_right,
-                        bottom_left,
-                        stroke_width=0,
-                        fill_opacity=1.0,
-                        color=get_color_from_size(local_cluster_sizes[i]),
-                        # interpolate_color(
-                        #     ACCENT_COLOR,
-                        #     DEFAULT_COLOR,
-                        #     np.power(local_cluster_sizes[i] / x_values.shape[0], 0.25),
-                        # ),
-                    )
-                )
-                polygon_sizes.append(local_cluster_sizes[i])
-            else:
-                polygons.add(Polygon((0, 0, 0), (0, 0, 0), (0, 0, 0)))
-                polygon_sizes.append(local_cluster_sizes[i])
+        polygons_list, polygon_sizes = _build_density_polygons(
+            density_axes,
+            local_cluster_density_profiles,
+            local_cluster_sizes,
+            np.linspace(0, 1, base_data.shape[0]),
+            lambda idx: colormap_color(
+                local_cluster_sizes[idx],
+                2,
+                base_data.shape[0],
+                power=8.0,
+                invert=True,
+            ),
+            positive_only_min=True,
+        )
+        polygons = VGroup(*polygons_list)
 
         self.marked_next_slide()
         self.play(FadeOut(tmp_text))
@@ -2523,9 +2023,6 @@ class SortingDensity(ThreeDTIMCSlide):
 
 
 class EVoCLogo(ThreeDTIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
 
@@ -2856,13 +2353,10 @@ def get_sorting_animations(icons, floor_y=-3.0, spacing=0.5, animate=True):
     return animations
 
 
-# run_staggered_simulation(num_icons=200, duration=20)
+run_staggered_simulation(num_icons=200, duration=20)
 
 
 class EmbeddingUseCase(ThreeDTIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
         ## TITLE SLIDE
@@ -3096,9 +2590,6 @@ class EmbeddingUseCase(ThreeDTIMCSlide):
 
 class HighDClusteringOverview(ThreeDTIMCSlide):
 
-    max_duration_before_split_reverse = None
-    skip_reversing = True
-
     def construct(self):
 
         self.load_state("logo_intro")
@@ -3197,30 +2688,9 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
                 "tip_width": 0.15,
             },
         )
-        scaled_base_data = base_data * (12, 9)
-
-        def pdf_order(cluster_tree, current_node):
-            children = cluster_tree[cluster_tree["parent"] == current_node]["child"]
-            if len(children) == 0:
-                return [
-                    current_node,
-                ]
-            else:
-                sorted_children = np.concatenate([children[0::2], children[1::2][::-1]])
-                return sum(
-                    [pdf_order(cluster_tree, child) for child in sorted_children], []
-                )
-
-        import hdbscan
-
-        model = hdbscan.HDBSCAN(
-            min_samples=5,
-            min_cluster_size=int(2),
-            cluster_selection_method="leaf",
-            approx_min_span_tree=False,
-        ).fit(scaled_base_data)
-        ctree = model.condensed_tree_.to_numpy()
-        points_in_pdf_order = pdf_order(ctree, ctree["parent"].min())
+        _, ctree, points_in_pdf_order = fit_hdbscan(
+            SCALED_BASE_DATA, min_cluster_size=2, approx_min_span_tree=False
+        )
 
         pdf_order_of_points = np.argsort(points_in_pdf_order)
 
@@ -3234,21 +2704,13 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
         max_density = density_values.max()
         min_density = density_values.min()
 
-        def get_color_from_density(density):
-            normalized_value = (density - min_density) / (max_density - min_density)
-            import matplotlib.pyplot as plt
-
-            cmap = plt.get_cmap("plasma")  # or 'plasma'
-            rgba = cmap(normalized_value)
-            return rgb_to_color(rgba[:3])
-
         for idx in range(base_data.shape[0]):
             x_pos = idx / base_data.shape[0]
             line = Line(
                 start=axes.c2p(x_pos, 0),
                 end=axes.c2p(x_pos, density_values[idx]),
                 stroke_width=0.5,
-                color=get_color_from_density(density_values[idx]),
+                color=colormap_color(density_values[idx], min_density, max_density),
             ).set_opacity(0.0)
             lines.add(line)
 
@@ -3353,19 +2815,6 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
         )
         self.marked_next_slide()
 
-        # # 3. Animation: Create and Spin
-        # # Rotate around a tilted axis to show all dimensions
-        # self.play(Create(cube), FadeIn(dots_cube), run_time=2)
-        # self.play(
-        #     Rotate(
-        #         stage_1,
-        #         angle=2 * PI,
-        #         axis=np.array([1, 1, 0]),  # Tilts the spin
-        #         run_time=4,
-        #         rate_func=linear,
-        #     )
-        # )
-
         # Reveal next stage with an arrow
         arrow1 = Arrow(stage_1.get_right(), stage_2.get_left(), buff=0.1)
         self.play(
@@ -3393,112 +2842,35 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
         self.wait(0.1)
         self.marked_next_slide()
 
-        # Add curved annotation arrow for manifold learning
-        annotation_text1 = Paragraph(
+        # Curved annotation arrows
+        _create_curved_annotation(
+            self,
             "Manifold learning\n(e.g. UMAP)",
-            font_size=24,
-            alignment="center",
-            color=COLOR_CYCLE[3],
-            stroke_color=COLOR_CYCLE[3],
+            LEFT * 4.5,
+            arrow1,
+            (UP * 1.5 + LEFT * 0.5, DOWN + RIGHT * 0.5),
+            18 * DEGREES,
         )
-        annotation_text1.to_edge(DOWN).shift(LEFT * 4.5)
-        curve_points = [
-            annotation_text1.get_top() + UP * 0.2,
-            annotation_text1.get_top() + UP * 1.5 + LEFT * 0.5,
-            arrow1.get_center() + DOWN + RIGHT * 0.5,
-            arrow1.get_center() + DOWN * 0.25,
-        ]
-
-        # Use VMobject to create custom curve
-        curved_path1 = VMobject(color=COLOR_CYCLE[3], stroke_width=4)
-        curved_path1.set_points_smoothly(curve_points)
-
-        # Add tip
-        tip1 = StealthTip(color=COLOR_CYCLE[3])
-        tip1.move_to(curve_points[-1])
-        # Orient the tip
-        direction = curve_points[-1] - curve_points[-2]
-        angle = np.arctan2(direction[1], direction[0]) + 18 * DEGREES
-        tip1.rotate(angle)
-
-        annotation1 = VGroup(curved_path1, tip1)
-
-        self.add_fixed_in_frame_mobjects(annotation1)
-        self.play(Create(curved_path1), GrowFromCenter(tip1))
-        self.add_fixed_in_frame_mobjects(annotation_text1)
-        self.play(Write(annotation_text1))
         self.marked_next_slide()
 
-        # Add curved annotation arrow for density
-        annotation_text2 = Paragraph(
+        _create_curved_annotation(
+            self,
             "Density Clustering\n(e.g. HDBSCAN)",
-            font_size=24,
-            alignment="center",
-            color=COLOR_CYCLE[3],
-            stroke_color=COLOR_CYCLE[3],
+            LEFT * 0.1 + UP * 0.5,
+            arrow2,
+            (UP * 1 + RIGHT * 0.15, DOWN + LEFT * 0.15),
+            -18 * DEGREES,
         )
-        annotation_text2.to_edge(DOWN).shift(LEFT * 0.1 + UP * 0.5)
-        curve_points = [
-            annotation_text2.get_top() + UP * 0.2,
-            annotation_text2.get_top() + UP * 1 + RIGHT * 0.15,
-            arrow2.get_center() + DOWN + LEFT * 0.15,
-            arrow2.get_center() + DOWN * 0.25,
-        ]
-
-        # Use VMobject to create custom curve
-        curved_path2 = VMobject(color=COLOR_CYCLE[3], stroke_width=4)
-        curved_path2.set_points_smoothly(curve_points)
-
-        # Add tip
-        tip2 = StealthTip(color=COLOR_CYCLE[3])
-        tip2.move_to(curve_points[-1])
-        # Orient the tip
-        direction = curve_points[-1] - curve_points[-2]
-        angle = np.arctan2(direction[1], direction[0]) - 18 * DEGREES
-        tip2.rotate(angle)
-
-        annotation2 = VGroup(curved_path2, tip2)
-
-        self.add_fixed_in_frame_mobjects(annotation2)
-        self.play(Create(curved_path2), GrowFromCenter(tip2))
-        self.add_fixed_in_frame_mobjects(annotation_text2)
-        self.play(Write(annotation_text2))
         self.marked_next_slide()
 
-        # Add curved annotation arrow for multiscale clusters
-        annotation_text3 = Paragraph(
+        _create_curved_annotation(
+            self,
             "Resolution Persistence\n(e.g. PLSCAN)",
-            font_size=24,
-            alignment="center",
-            color=COLOR_CYCLE[3],
-            stroke_color=COLOR_CYCLE[3],
+            RIGHT * 4.5,
+            arrow3,
+            (UP * 1.25 + LEFT * 0.25, DOWN + LEFT * 0.25),
+            -18 * DEGREES,
         )
-        annotation_text3.to_edge(DOWN).shift(RIGHT * 4.5)
-        curve_points = [
-            annotation_text3.get_top() + UP * 0.2,
-            annotation_text3.get_top() + UP * 1.25 + LEFT * 0.25,
-            arrow3.get_center() + DOWN + LEFT * 0.25,
-            arrow3.get_center() + DOWN * 0.25,
-        ]
-
-        # Use VMobject to create custom curve
-        curved_path3 = VMobject(color=COLOR_CYCLE[3], stroke_width=4)
-        curved_path3.set_points_smoothly(curve_points)
-
-        # Add tip
-        tip3 = StealthTip(color=COLOR_CYCLE[3])
-        tip3.move_to(curve_points[-1])
-        # Orient the tip
-        direction = curve_points[-1] - curve_points[-2]
-        angle = np.arctan2(direction[1], direction[0]) - 18 * DEGREES
-        tip3.rotate(angle)
-
-        annotation3 = VGroup(curved_path3, tip3)
-
-        self.add_fixed_in_frame_mobjects(annotation3)
-        self.play(Create(curved_path3), GrowFromCenter(tip3))
-        self.add_fixed_in_frame_mobjects(annotation_text3)
-        self.play(Write(annotation_text3))
 
         stage_centers = {
             "embeddings": stage_1.get_center().tolist(),
@@ -3513,9 +2885,6 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
 
 
 class Benefits(TIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
 
@@ -3541,9 +2910,6 @@ class Benefits(TIMCSlide):
 
 
 class Summary(TIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
 
     def construct(self):
 
@@ -3609,66 +2975,7 @@ class Summary(TIMCSlide):
         self.play(FadeIn(install))
 
 
-class TitleSlide(TIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
-
-    def construct(self):
-
-        logo = SVGMobject("evoc_logo_horizontal.svg").scale(2.0).shift(UP * 0.5)
-        venue = Text(
-            "TMLS 2026, Toronto Canada", font_size=48, font="Marcellus SC"
-        ).next_to(logo, DOWN, buff=1)
-        speaker = Text(
-            "Leland McInnes", color=ACCENT_COLOR, font_size=40, font="Marcellus SC"
-        ).next_to(venue, DOWN)
-
-        self.add(logo, venue, speaker)
-
-        self.wait(1)
-
-
-class PhaseManifold(ThreeDTIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
-
-    def _pan_to_stages(self, *stage_keys, zoom=2.5, pan_run_time=1.5):
-        """Zoom into embeddings then pan across to each subsequent stage."""
-        with open(os.path.join(self.state_dir, "stage_centers.json")) as f:
-            centers = json.load(f)
-
-        # Always start by zooming into embeddings
-        self.play(self.logo.animate.set_opacity(0.0), run_time=0.25)
-        self.move_camera(
-            frame_center=np.array(centers["embeddings"]),
-            zoom=zoom,
-            run_time=pan_run_time,
-            rate_func=smooth,
-        )
-        # self.marked_next_slide()
-
-        # Then pan across to each subsequent stage
-        for key in stage_keys:
-            self.move_camera(
-                frame_center=np.array(centers[key]),
-                run_time=pan_run_time,
-                rate_func=smooth,
-            )
-            # self.marked_next_slide()
-
-    def construct(self):
-
-        self.load_state("overview")
-        self._pan_to_stages("manifold")
-        self.start_section_wipe("Manifold Learning")
-
-
-class PhaseClusters(ThreeDTIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
+class PhaseSlide(object):
 
     def _pan_to_stages(self, *stage_keys, zoom=2.5, pan_run_time=1.5):
         """Zoom into embeddings then pan across to each subsequent stage."""
@@ -3682,20 +2989,15 @@ class PhaseClusters(ThreeDTIMCSlide):
             run_time=pan_run_time,
             rate_func=smooth,
         )
-        # self.marked_next_slide()
 
-        # Then pan across to each subsequent stage
         for key in stage_keys:
             self.move_camera(
                 frame_center=np.array(centers[key]),
                 run_time=pan_run_time,
                 rate_func=smooth,
             )
-            # self.marked_next_slide()
 
     def transition_to_overview(self, run_time_fadeout=1.5, run_time_fadein=0.75):
-        import pickle
-
         filepath = os.path.join(self.state_dir, "overview.pkl")
         with open(filepath, "rb") as f:
             overview_data = pickle.load(f)
@@ -3718,7 +3020,7 @@ class PhaseClusters(ThreeDTIMCSlide):
         )
 
         self.move_camera(
-            zoom=0.33,  # The zoom-out effect
+            zoom=0.33,
             added_anims=[
                 FadeOut(current_mobs),
             ],
@@ -3733,7 +3035,6 @@ class PhaseClusters(ThreeDTIMCSlide):
         )
         self.remove(current_mobs)
 
-        # Phase 2: fade in overview
         self.add(overview_mobs)
         self.play(
             FadeIn(overview_mobs),
@@ -3741,93 +3042,27 @@ class PhaseClusters(ThreeDTIMCSlide):
             rate_func=smooth,
         )
 
-    def construct(self):
 
+class PhaseManifold(ThreeDTIMCSlide, PhaseSlide):
+
+    def construct(self):
+        self.load_state("overview")
+        self._pan_to_stages("manifold")
+        self.start_section_wipe("Manifold Learning")
+
+
+class PhaseClusters(ThreeDTIMCSlide, PhaseSlide):
+
+    def construct(self):
         self.load_state("sorting_density")
         self.transition_to_overview()
         self._pan_to_stages("clusters")
         self.start_section_wipe("Cluster Extraction")
 
 
-class PhaseDensity(ThreeDTIMCSlide):
-
-    max_duration_before_split_reverse = None
-    skip_reversing = True
-
-    def _pan_to_stages(self, *stage_keys, zoom=2.5, pan_run_time=1.5):
-        """Zoom into embeddings then pan across to each subsequent stage."""
-        with open(os.path.join(self.state_dir, "stage_centers.json")) as f:
-            centers = json.load(f)
-
-        # Always start by zooming into embeddings
-        self.play(self.logo.animate.set_opacity(0.0), run_time=0.25)
-        self.move_camera(
-            frame_center=np.array(centers["embeddings"]),
-            zoom=zoom,
-            run_time=pan_run_time,
-            rate_func=smooth,
-        )
-        # self.marked_next_slide()
-
-        # Then pan across to each subsequent stage
-        for key in stage_keys:
-            self.move_camera(
-                frame_center=np.array(centers[key]),
-                run_time=pan_run_time,
-                rate_func=smooth,
-            )
-            # self.marked_next_slide()
-
-    def transition_to_overview(self, run_time_fadeout=1.5, run_time_fadein=0.75):
-        import pickle
-
-        filepath = os.path.join(self.state_dir, "overview.pkl")
-        with open(filepath, "rb") as f:
-            overview_data = pickle.load(f)
-
-        overview_camera = overview_data["camera"]
-        overview_mobs = Group(
-            *[
-                obj
-                for obj in overview_data["mobjects"]
-                if not isinstance(obj, ImageMobject)
-            ]
-        )
-
-        current_mobs = Group(
-            *list(
-                obj
-                for obj in self.mobjects
-                if not isinstance(obj, ImageMobject) and obj != self.logo
-            )
-        )
-
-        self.move_camera(
-            zoom=0.33,  # The zoom-out effect
-            added_anims=[
-                FadeOut(current_mobs),
-            ],
-            run_time=2,
-        )
-        self.move_camera(
-            frame_center=overview_camera["frame_center"],
-            zoom=1.0,
-            phi=0,
-            theta=-90 * DEGREES,
-            run_time=0.1,
-        )
-        self.remove(current_mobs)
-
-        # Phase 2: fade in overview
-        self.add(overview_mobs)
-        self.play(
-            FadeIn(overview_mobs),
-            run_time=run_time_fadein,
-            rate_func=smooth,
-        )
+class PhaseDensity(ThreeDTIMCSlide, PhaseSlide):
 
     def construct(self):
-
         self.load_state("knn_embedding")
         self.transition_to_overview()
         self._pan_to_stages("density")

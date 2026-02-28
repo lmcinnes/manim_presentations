@@ -21,8 +21,8 @@ DATA_DIR = Path(__file__).parent / "data" / "extradata"
 _LAMBDA_SCALE = 100.0
 
 
-def lambda_to_density(lam):
-    return np.exp(-_LAMBDA_SCALE / lam)
+def lambda_to_density(lam, lambda_scale=_LAMBDA_SCALE):
+    return np.exp(-lambda_scale / lam)
 
 
 def pdf_order(cluster_tree, current_node):
@@ -50,13 +50,31 @@ def find_permutation(arr1, arr2):
     return sorter[np.searchsorted(arr1, arr2, sorter=sorter)]
 
 
-def density_profile_for_cluster(ctree, cluster_num, order):
+def fit_hdbscan(data, **kwargs):
+    """Fit HDBSCAN and return (model, ctree, points_in_pdf_order).
+
+    Default parameters match the precomputation settings; callers can
+    override any HDBSCAN keyword argument.
+    """
+    defaults = dict(
+        min_samples=5,
+        min_cluster_size=15,
+        cluster_selection_method="leaf",
+    )
+    defaults.update(kwargs)
+    model = hdbscan.HDBSCAN(**defaults).fit(data)
+    ctree = model.condensed_tree_.to_numpy()
+    points_in_pdf_order = pdf_order(ctree, ctree["parent"].min())
+    return model, ctree, points_in_pdf_order
+
+
+def density_profile_for_cluster(ctree, cluster_num, order, lambda_scale=_LAMBDA_SCALE):
     subtree = ctree[ctree["parent"] == cluster_num]
     singleton_children = subtree[subtree["child_size"] == 1]
     cluster_profile = np.vstack(
         [
             singleton_children["child"],
-            lambda_to_density(singleton_children["lambda_val"]),
+            lambda_to_density(singleton_children["lambda_val"], lambda_scale),
         ]
     ).T
     cluster_children = subtree[subtree["child_size"] > 1]
@@ -65,7 +83,12 @@ def density_profile_for_cluster(ctree, cluster_num, order):
         points = descendant_points(ctree, row["child"])
         extra_cluster_profiles.append(
             np.vstack(
-                [points, np.full(len(points), lambda_to_density(row["lambda_val"]))]
+                [
+                    points,
+                    np.full(
+                        len(points), lambda_to_density(row["lambda_val"], lambda_scale)
+                    ),
+                ]
             ).T
         )
     cluster_profile = np.vstack([cluster_profile] + extra_cluster_profiles)
@@ -75,7 +98,9 @@ def density_profile_for_cluster(ctree, cluster_num, order):
     )
     parent_row = ctree[ctree["child"] == cluster_num]
     min_val = (
-        lambda_to_density(parent_row["lambda_val"]) if len(parent_row) == 1 else 0.0
+        lambda_to_density(parent_row["lambda_val"], lambda_scale)
+        if len(parent_row) == 1
+        else 0.0
     )
     cluster_profile = np.vstack(
         [
@@ -90,11 +115,8 @@ def density_profile_for_cluster(ctree, cluster_num, order):
 
 
 def compute_density_profiles(base_data):
-    hdbscan_model = hdbscan.HDBSCAN(
-        min_samples=5, min_cluster_size=15, cluster_selection_method="leaf"
-    ).fit(base_data)
-    ctree = hdbscan_model.condensed_tree_.to_numpy()
-    order = np.array(pdf_order(ctree, ctree["parent"].min()))
+    _, ctree, points_in_pdf_order = fit_hdbscan(base_data)
+    order = np.array(points_in_pdf_order)
     cluster_tree = ctree[ctree["child_size"] > 1]
     clusters = np.unique(np.hstack([cluster_tree["parent"], cluster_tree["child"]]))
 
