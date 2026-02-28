@@ -10,16 +10,19 @@ import pandas as pd
 import sklearn.cluster
 import sklearn.metrics
 from datasets import load_dataset
-from pathlib import Path
 
-# =============================================================================
-# Paths
-# =============================================================================
+from data_manifest import (
+    BENCHMARKS_DIR as DATA_DIR,
+    EMBEDDINGS_DIR as EMBEDDING_DIR,
+    benchmark_file,
+    benchmark_ylim_file,
+    benchmark_yticks_file,
+    all_benchmark_files,
+    BENCHMARK_DATASETS,
+    BENCHMARK_METRICS,
+)
 
-DATA_DIR = Path(__file__).parent / "data" / "benchmarks"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-EMBEDDING_DIR = Path(__file__).parent / "data" / "embeddings"
 
 # =============================================================================
 # Dataset configs: per-dataset algorithm parameters
@@ -66,25 +69,6 @@ MEASURES = [
 ]
 
 ALGORITHMS = ("kmeans", "umap_hdbscan", "EVoC")
-
-# =============================================================================
-# Data loading
-# =============================================================================
-
-ds = load_dataset("Syoy/birdclef_2023_train")
-
-cifar_data = np.load(EMBEDDING_DIR / "CIFAR100-CLIP-vectors.npy")
-cifar_target = np.load(EMBEDDING_DIR / "CIFAR100-imageclass.npy")
-
-news_data = np.load(EMBEDDING_DIR / "20-newsgroups-sentence-bert-embeddings.npy")
-news_target = np.load(EMBEDDING_DIR / "20-newsgroups-sentence-targets.npy")
-
-birdclef2023_data = np.asarray(ds["train"]["embeddings"])
-birdclef2023_target = np.asarray(ds["train"]["primary_label"])
-# restrict to sufficiently large classes
-mask = np.isin(birdclef2023_target, np.where(np.bincount(birdclef2023_target) > 100)[0])
-birdclef2023_data = birdclef2023_data[mask]
-birdclef2023_target = birdclef2023_target[mask]
 
 # =============================================================================
 # Clustering algorithms
@@ -224,15 +208,6 @@ def run_dataset_benchmarks(data, target, n_runs, kmeans_kwargs, umap_hdbscan_kwa
 def save_swarm_data(results, prefix):
     """Generate swarm plots and save coordinates/axis limits for all measures."""
     for measure_name, measure_short in MEASURES:
-        # sns.catplot(
-        #     results[results.measure == measure_name],
-        #     x="algorithm",
-        #     hue="algorithm",
-        #     y="value",
-        #     col="measure",
-        #     height=10,
-        #     kind="swarm",
-        # )
         swarm_dict, ylims, yticks = get_swarm_coordinates(
             results,
             x="algorithm",
@@ -242,31 +217,67 @@ def save_swarm_data(results, prefix):
         for alg in ALGORITHMS:
             print(f"Saving swarm coordinates for {prefix} - {measure_short} - {alg}")
             np.save(
-                DATA_DIR / f"{prefix}_{measure_short}_{alg}_swarm.npy",
+                benchmark_file(prefix, measure_short, alg),
                 swarm_dict[alg.replace("_", "\n")],
             )
-        np.save(DATA_DIR / f"{prefix}_{measure_short}_ylim.npy", np.asarray(ylims))
-        np.save(DATA_DIR / f"{prefix}_{measure_short}_yticks.npy", np.asarray(yticks))
+        np.save(benchmark_ylim_file(prefix, measure_short), np.asarray(ylims))
+        np.save(benchmark_yticks_file(prefix, measure_short), np.asarray(yticks))
         plt.close("all")
 
 
-# =============================================================================
-# Run benchmarks
-# =============================================================================
+def _load_datasets():
+    """Load all benchmark datasets (may be slow — downloads from HuggingFace)."""
+    ds = load_dataset("Syoy/birdclef_2023_train")
 
-datasets = {
-    "cifar": (cifar_data, cifar_target),
-    "news": (news_data, news_target),
-    "bird": (birdclef2023_data, birdclef2023_target),
-}
+    cifar_data = np.load(EMBEDDING_DIR / "CIFAR100-CLIP-vectors.npy")
+    cifar_target = np.load(EMBEDDING_DIR / "CIFAR100-imageclass.npy")
 
-for name, (data, target) in datasets.items():
-    cfg = DATASET_CONFIGS[name]
-    results = run_dataset_benchmarks(
-        data,
-        target,
-        n_runs=cfg["n_runs"],
-        kmeans_kwargs=cfg["kmeans_kwargs"],
-        umap_hdbscan_kwargs=cfg["umap_hdbscan_kwargs"],
+    news_data = np.load(EMBEDDING_DIR / "20-newsgroups-sentence-bert-embeddings.npy")
+    news_target = np.load(EMBEDDING_DIR / "20-newsgroups-sentence-targets.npy")
+
+    birdclef2023_data = np.asarray(ds["train"]["embeddings"])
+    birdclef2023_target = np.asarray(ds["train"]["primary_label"])
+    mask = np.isin(
+        birdclef2023_target,
+        np.where(np.bincount(birdclef2023_target) > 100)[0],
     )
-    save_swarm_data(results, prefix=name)
+    birdclef2023_data = birdclef2023_data[mask]
+    birdclef2023_target = birdclef2023_target[mask]
+
+    return {
+        "cifar": (cifar_data, cifar_target),
+        "news": (news_data, news_target),
+        "bird": (birdclef2023_data, birdclef2023_target),
+    }
+
+
+def regenerate_data():
+    """Run all benchmarks and save swarm data (always regenerates)."""
+    datasets = _load_datasets()
+    for name, (data, target) in datasets.items():
+        cfg = DATASET_CONFIGS[name]
+        results = run_dataset_benchmarks(
+            data,
+            target,
+            n_runs=cfg["n_runs"],
+            kmeans_kwargs=cfg["kmeans_kwargs"],
+            umap_hdbscan_kwargs=cfg["umap_hdbscan_kwargs"],
+        )
+        save_swarm_data(results, prefix=name)
+
+
+def ensure_data():
+    """Generate benchmark data only if any output file is missing."""
+    if all(p.exists() for p in all_benchmark_files()):
+        return
+    print("Some benchmark data files are missing \u2014 regenerating \u2026")
+    regenerate_data()
+
+
+if __name__ == "__main__":
+    import sys
+
+    if "--only-missing" in sys.argv:
+        ensure_data()
+    else:
+        regenerate_data()

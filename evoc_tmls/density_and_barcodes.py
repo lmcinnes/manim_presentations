@@ -1,6 +1,9 @@
 # type: ignore
+import pickle
+
 import numpy as np
 import hdbscan
+import sklearn.preprocessing
 from evoc.clustering import (
     build_kdtree,
     parallel_boruvka,
@@ -14,9 +17,21 @@ from evoc.clustering import (
     find_peaks,
     mask_condensed_tree,
 )
-from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data" / "extradata"
+from data_manifest import (
+    EXTRADATA_DIR as DATA_DIR,
+    BASE_DATA as BASE_DATA_PATH,
+    DATA_COLORMAP as DATA_COLORMAP_PATH,
+    CLUSTER_DENSITY_PROFILES,
+    CLUSTER_SIZES,
+    CLUSTER_BINARY_TREE,
+    BARCODE_BARS,
+    PERSISTENCE_SCORES_TRACE,
+    SCALED_CTREE,
+    SCALED_POINTS_IN_PDF_ORDER,
+    SCALED_DENSITY_VALUES,
+    DENSITY_AND_BARCODES_FILES,
+)
 
 _LAMBDA_SCALE = 100.0
 
@@ -126,8 +141,8 @@ def compute_density_profiles(base_data):
         profiles.append(profile)
         sizes.append(size)
 
-    np.save(DATA_DIR / "cluster_density_profiles.npy", np.vstack(profiles))
-    np.save(DATA_DIR / "cluster_sizes.npy", np.asarray(sizes))
+    np.save(CLUSTER_DENSITY_PROFILES, np.vstack(profiles))
+    np.save(CLUSTER_SIZES, np.asarray(sizes))
 
     binary_tree = np.zeros((len(clusters), 2), dtype=np.int32)
     n_samples = base_data.shape[0]
@@ -139,7 +154,7 @@ def compute_density_profiles(base_data):
         else:
             binary_tree[parent, 0] = child
 
-    np.save(DATA_DIR / "cluster_binary_tree.npy", binary_tree)
+    np.save(CLUSTER_BINARY_TREE, binary_tree)
 
 
 def compute_barcode(base_data):
@@ -174,11 +189,11 @@ def compute_barcode(base_data):
     valid_weights = valid_weights[sort_order]
 
     np.save(
-        DATA_DIR / "barcode_bars.npy",
+        BARCODE_BARS,
         np.vstack([valid_births, valid_deaths, valid_weights]).T,
     )
     np.save(
-        DATA_DIR / "persistence_scores_trace.npy",
+        PERSISTENCE_SCORES_TRACE,
         np.vstack(
             [
                 np.column_stack((sizes[:-1], sizes[1:])).reshape(-1),
@@ -188,11 +203,58 @@ def compute_barcode(base_data):
     )
 
 
-def main():
-    base_data = np.load(DATA_DIR / "base_data.npy")
+def compute_scaled_hdbscan():
+    """Precompute HDBSCAN on SCALED_BASE_DATA for render-time use.
+
+    This mirrors the computation done at render time in SortingDensity and
+    HighDClusteringOverview, saving ctree, pdf-order, and density values.
+    """
+    raw_data = (np.load(BASE_DATA_PATH) + 0.5) * 10
+    order = np.arange(raw_data.shape[0])
+    rng = np.random.RandomState(42)
+    rng.shuffle(order)
+    raw_data = raw_data[order]
+    scaled = raw_data * (12, 9)
+
+    _, ctree, points_in_pdf_order = fit_hdbscan(
+        scaled, min_cluster_size=2, approx_min_span_tree=False
+    )
+
+    density_values = np.zeros(raw_data.shape[0])
+    for idx, i in enumerate(points_in_pdf_order):
+        row = ctree[ctree["child"] == i]
+        density_values[idx] = np.exp(-(1.0 / row["lambda_val"][0]))
+
+    with open(SCALED_CTREE, "wb") as f:
+        pickle.dump(ctree, f)
+    np.save(SCALED_POINTS_IN_PDF_ORDER, np.asarray(points_in_pdf_order))
+    np.save(SCALED_DENSITY_VALUES, density_values)
+
+
+def regenerate_data():
+    """Regenerate all density / barcode / scaled-HDBSCAN data."""
+    base_data = np.load(BASE_DATA_PATH)
+    print("Computing density profiles …")
     compute_density_profiles(base_data)
+    print("Computing barcode …")
     compute_barcode(base_data)
+    print("Computing scaled HDBSCAN …")
+    compute_scaled_hdbscan()
+    print("Done.")
+
+
+def ensure_data():
+    """Generate data only if any output file is missing."""
+    if all(p.exists() for p in DENSITY_AND_BARCODES_FILES):
+        return
+    print("Some density/barcode data files are missing — regenerating …")
+    regenerate_data()
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if "--only-missing" in sys.argv:
+        ensure_data()
+    else:
+        regenerate_data()

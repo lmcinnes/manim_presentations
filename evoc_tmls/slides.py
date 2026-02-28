@@ -30,19 +30,46 @@ from decimal import Decimal
 from scipy.signal import find_peaks
 import os
 import json
-from pathlib import Path
+
+from data_manifest import (
+    BASE_DATA as BASE_DATA_PATH,
+    DATA_COLORMAP as DATA_COLORMAP_PATH,
+    BARCODE_BARS as BARCODE_BARS_PATH,
+    PERSISTENCE_SCORES_TRACE as PERSISTENCE_TRACE_PATH,
+    CLUSTER_DENSITY_PROFILES as CLUSTER_DENSITY_PROFILES_PATH,
+    CLUSTER_SIZES as CLUSTER_SIZES_PATH,
+    CLUSTER_BINARY_TREE as CLUSTER_BINARY_TREE_PATH,
+    EMBEDDING_CARTOON_RAW,
+    EMBEDDING_CARTOON_EDGES,
+    EVOC_LOGO_DATA,
+    EVOC_LOGO_COLORS,
+    ICON_DELUGE_SIMULATION,
+    SCALED_CTREE,
+    SCALED_POINTS_IN_PDF_ORDER,
+    SCALED_DENSITY_VALUES,
+    BENCHMARK_DATASETS,
+    BENCHMARK_METRICS,
+    BENCHMARK_ALGORITHMS,
+    benchmark_file,
+    benchmark_ylim_file,
+    benchmark_yticks_file,
+)
 
 from density_and_barcodes import (
-    fit_hdbscan,
     density_profile_for_cluster,
     lambda_to_density,
 )
+from density_and_barcodes import ensure_data as _ensure_density_data
+from falling_icon_simulation import ensure_data as _ensure_simulation_data
 
-BENCHMARKS_DIR = Path(__file__).parent / "data" / "benchmarks"
-EXTRADATA_DIR = Path(__file__).parent / "data" / "extradata"
+# ── Ensure precomputed data exists ───────────────────────────────────────────
+_ensure_density_data()
+_ensure_simulation_data()
 
-base_data = (np.load(EXTRADATA_DIR / "base_data.npy") + 0.5) * 10
-data_colormap = np.load(EXTRADATA_DIR / "data_colormap.npy")
+# ── Module-level data loading ────────────────────────────────────────────────
+
+base_data = (np.load(BASE_DATA_PATH) + 0.5) * 10
+data_colormap = np.load(DATA_COLORMAP_PATH)
 
 order = np.arange(base_data.shape[0])
 rng_state = np.random.RandomState(42)
@@ -50,16 +77,7 @@ rng_state.shuffle(order)
 base_data = base_data[order]
 data_colormap = data_colormap[order]
 SCALED_BASE_DATA = base_data * (12, 9)
-fly_away = base_data - (
-    5,
-    5,
-)  # np.random.random(size=(base_data.shape[0], 2)) - (0.5, 0.5)
-sklearn.preprocessing.normalize(fly_away, copy=False)
-fly_away *= 30
 
-_BENCHMARK_DATASETS = ["cifar", "news", "bird"]
-_BENCHMARK_METRICS = ["ari", "cs", "time"]
-_BENCHMARK_ALGORITHMS = ["kmeans", "umap_hdbscan", "EVoC"]
 _ALGO_DISPLAY_NAMES = {
     "kmeans": "K-Means",
     "umap_hdbscan": "UMAP+HDBSCAN",
@@ -67,18 +85,16 @@ _ALGO_DISPLAY_NAMES = {
 }
 
 benchmark_data = {}
-for _ds in _BENCHMARK_DATASETS:
+for _ds in BENCHMARK_DATASETS:
     benchmark_data[_ds] = {}
-    for _metric in _BENCHMARK_METRICS:
+    for _metric in BENCHMARK_METRICS:
         benchmark_data[_ds][_metric] = {
             "swarms": {
-                _ALGO_DISPLAY_NAMES[algo]: np.load(
-                    BENCHMARKS_DIR / f"{_ds}_{_metric}_{algo}_swarm.npy"
-                )
-                for algo in _BENCHMARK_ALGORITHMS
+                _ALGO_DISPLAY_NAMES[algo]: np.load(benchmark_file(_ds, _metric, algo))
+                for algo in BENCHMARK_ALGORITHMS
             },
-            "ylim": np.load(BENCHMARKS_DIR / f"{_ds}_{_metric}_ylim.npy"),
-            "yticks": np.load(BENCHMARKS_DIR / f"{_ds}_{_metric}_yticks.npy"),
+            "ylim": np.load(benchmark_ylim_file(_ds, _metric)),
+            "yticks": np.load(benchmark_yticks_file(_ds, _metric)),
         }
 
 SWARM_COLORS = {
@@ -87,18 +103,23 @@ SWARM_COLORS = {
     "EVoC": COLOR_CYCLE[1],
 }
 
-barcode_bars = np.load(EXTRADATA_DIR / "barcode_bars.npy")
-persistence_trace = np.load(EXTRADATA_DIR / "persistence_scores_trace.npy")
+barcode_bars = np.load(BARCODE_BARS_PATH)
+persistence_trace = np.load(PERSISTENCE_TRACE_PATH)
 
-cluster_density_profiles = np.load(EXTRADATA_DIR / "cluster_density_profiles.npy")
-cluster_sizes = np.load(EXTRADATA_DIR / "cluster_sizes.npy")
-cluster_binary_tree = np.load(EXTRADATA_DIR / "cluster_binary_tree.npy")
+cluster_density_profiles = np.load(CLUSTER_DENSITY_PROFILES_PATH)
+cluster_sizes = np.load(CLUSTER_SIZES_PATH)
+cluster_binary_tree = np.load(CLUSTER_BINARY_TREE_PATH)
 
-knn_graph_embedding_raw_data = np.load("embedding_cartoon_raw_data.npy")
+knn_graph_embedding_raw_data = np.load(EMBEDDING_CARTOON_RAW)
 knn_graph_embedding_raw_data -= knn_graph_embedding_raw_data.mean(axis=0)
-knn_graph_embedding_2d_data = np.load("embedding_cartoon_2d_data.npy")
-knn_graph_embedding_edges = pd.read_csv("embedding_cartoon_edges.csv")
-knn_graph_embedding_2d_data -= np.floor(knn_graph_embedding_2d_data.min(axis=0))
+knn_graph_embedding_edges = pd.read_csv(EMBEDDING_CARTOON_EDGES)
+
+# Precomputed HDBSCAN on SCALED_BASE_DATA
+with open(SCALED_CTREE, "rb") as _f:
+    scaled_ctree = pickle.load(_f)
+scaled_points_in_pdf_order = np.load(SCALED_POINTS_IN_PDF_ORDER)
+scaled_pdf_order_of_points = np.argsort(scaled_points_in_pdf_order)
+scaled_density_values = np.load(SCALED_DENSITY_VALUES)
 
 
 def colormap_color(value, vmin, vmax, cmap_name="plasma", power=1.0, invert=False):
@@ -108,18 +129,6 @@ def colormap_color(value, vmin, vmax, cmap_name="plasma", power=1.0, invert=Fals
         normalized = 1.0 - normalized
     rgba = plt.get_cmap(cmap_name)(normalized**power)
     return rgb_to_color(rgba[:3])
-
-
-def descendants(binary_tree, idx):
-    result = []
-    left, right = binary_tree[idx]
-    if left > 0:
-        result.append(left)
-        result.extend(descendants(binary_tree, left))
-    if right > 0:
-        result.append(right)
-        result.extend(descendants(binary_tree, right))
-    return result
 
 
 def is_active_cluster(cluster_num, binary_tree, cluster_sizes, minimum_cluster_size):
@@ -1174,18 +1183,6 @@ class DensityToBarcode(TIMCSlide):
             direction=DOWN,
             buff=0.2,
         )
-        # barcode_plot_group = create_styled_axes(
-        #     x_range=[0, 350, 25],
-        #     y_range=[0, barcode_data.shape[0] + 1, 10],
-        #     x_label_tex="Minimum cluster size",
-        #     y_label_tex="Cluster Index",
-        #     x_tick_labels=[str(x) for x in np.arange(0, 350, 25)],
-        #     x_length=10,
-        #     y_length=3,
-        #     y_decimal_places=0,
-        #     include_y_axis=False,
-        # ).shift(DOWN * 1.5)
-        # barcode_axis = barcode_plot_group[0]
 
         swing_group = VGroup(min_cluster_size_scale, min_cluster_size_label)
         barcode_group = VGroup(barcode_axis, new_barcode_axis_label)
@@ -1919,11 +1916,10 @@ class SortingDensity(ThreeDTIMCSlide):
         self.play(self.dots.animate.set_opacity(1.0))
         self.wait(0.5)
 
-        _, ctree, points_in_pdf_order = fit_hdbscan(
-            scaled_base_data, min_cluster_size=2, approx_min_span_tree=False
-        )
-
-        pdf_order_of_points = np.argsort(points_in_pdf_order)
+        ctree = scaled_ctree
+        points_in_pdf_order = scaled_points_in_pdf_order
+        pdf_order_of_points = scaled_pdf_order_of_points
+        density_values = scaled_density_values
 
         density_axes = Axes(
             x_range=[0, 1],
@@ -1944,11 +1940,6 @@ class SortingDensity(ThreeDTIMCSlide):
 
         density_axes.shift(DOWN)
         self.play(self.dots.animate.shift(DOWN))
-
-        density_values = np.zeros(base_data.shape[0])
-        for idx, i in enumerate(points_in_pdf_order):
-            row = ctree[ctree["child"] == i][0]
-            density_values[idx] = np.exp(-(1.0 / row["lambda_val"]))
 
         lines = VGroup()
 
@@ -2031,8 +2022,8 @@ class EVoCLogo(ThreeDTIMCSlide):
         self.clear_slide()
 
         evoc_logo = SVGMobject("evoc_logo_only.svg").scale(4)
-        logo_data = np.load("evoc_logo_data.npy")
-        labels = np.load("evoc_logo_colors.npy")
+        logo_data = np.load(EVOC_LOGO_DATA)
+        labels = np.load(EVOC_LOGO_COLORS)
 
         logo_data[:, 0] /= logo_data.T[0].max() - logo_data.T[0].min()
         logo_data[:, 1] /= logo_data.T[1].max() - logo_data.T[1].min()
@@ -2160,137 +2151,6 @@ class EVoCLogo(ThreeDTIMCSlide):
         self.save_state("logo_intro")
 
 
-import pymunk
-import json
-import random
-import numpy as np
-
-
-def run_staggered_simulation(num_icons=100, duration=10, fps=30):
-    space = pymunk.Space()
-    space.gravity = (0, -900)
-    space.collision_bias = pow(1.0 - 0.1, 30.0)
-    random.seed(42)
-
-    # --- FIX: ROBUST FLOOR & WALLS ---
-    # Create the floor body first
-    static_body = space.static_body
-
-    # Ground segment: (x1, y1) to (x2, y2), thickness
-    floor = pymunk.Segment(static_body, (-600, -300), (600, -300), 20)
-    # floor.elastic_opacity = 0.2
-    floor.elasticity = 0.6
-    floor.friction = 1.0
-
-    # Add walls so icons don't bounce off-screen
-    left_wall = pymunk.Segment(static_body, (-400, -300), (-400, 800), 5)
-    right_wall = pymunk.Segment(static_body, (400, -300), (400, 800), 5)
-
-    space.add(floor)
-    # ---------------------------------
-
-    # Exponential growth parameters
-    # Growth rate 'k' determines how fast the deluge hits.
-    # Higher k = steeper "wall" of icons at the end.
-    k = 8.0
-    x = np.linspace(0, 1, num_icons)
-
-    # We map 0-1 to our duration, but using an exponential curve:
-    # f(x) = (exp(k*x) - 1) / (exp(k) - 1)
-    # Then we invert it so the density increases over time
-    exponential_curve = (np.exp(k * x) - 1) / (np.exp(k) - 1)
-
-    # Scale to duration (e.g., icons spawn over the first 70% of the video)
-    spawn_times = duration * 0.5 * (1 - exponential_curve[::-1])
-    spawn_times.sort()  # Ensure they drop in order
-    active_bodies = []  # Currently falling
-    pending_icons = []  # Waiting to be spawned
-
-    # Initialize all icons but keep them "off-stage"
-    for i in range(num_icons):
-        mass = 1
-        size = (40, 40)
-        moment = pymunk.moment_for_box(mass, size)
-        body = pymunk.Body(mass, moment)
-
-        if i < 4:
-            # These are your "Intro" icons. Start them in the center stack:
-            body.position = (-200, 150 - (i * 75))  # Matches Manim's 1.5 - i*1.0
-
-            # Add horizontal "burst" so they scatter
-            # Random x velocity between -200 and 200, slight upward bump
-            body.velocity = (random.uniform(-250, 250), random.uniform(0, 100))
-
-            # Add extra spin for these "hero" icons
-            body.angular_velocity = random.uniform(-10, 10)
-        else:
-            # The rest of the deluge...
-            body.position = (random.uniform(-350, 350), 600)
-            body.position = (random.uniform(-350, 350), 600)  # Start high up
-            body.angle = random.uniform(-0.2, 0.2)
-            body.angular_velocity = random.uniform(-2, 2)
-
-        shape = pymunk.Poly.create_box(body, size)
-        shape.elasticity = 0.2
-        shape.friction = 0.8
-
-        pending_icons.append(
-            {
-                "id": i,
-                "body": body,
-                "shape": shape,
-                "spawn_t": spawn_times[i],
-                "path": [],
-            }
-        )
-
-    # 2. Run Simulation
-    dt = 1.0 / fps
-    for frame in range(int(duration * fps)):
-        current_t = frame * dt
-
-        # Check if it's time to drop a new icon
-        for icon in pending_icons[:]:
-            if current_t >= icon["spawn_t"]:
-                space.add(icon["body"], icon["shape"])
-                active_bodies.append(icon)
-                pending_icons.remove(icon)
-
-        space.step(dt)
-
-        # Record positions
-        for icon in active_bodies:
-            icon["path"].append(
-                (
-                    round(icon["body"].position.x, 2),
-                    round(icon["body"].position.y, 2),
-                    round(icon["body"].angle, 3),
-                    frame,  # Record WHICH frame this icon started existing
-                )
-            )
-
-        total_ke_above_floor = sum(
-            b.kinetic_energy for b in space.bodies if b.position.y >= -300
-        )
-        if total_ke_above_floor < 0.1 and frame < (num_icons * 2):
-            break
-
-    # 3. Format for Manim
-    # Icons that haven't spawned yet will be placed far off-screen
-    output_data = []
-    for icon in active_bodies + pending_icons:
-        output_data.append(
-            {
-                "id": icon["id"],
-                "spawn_frame": int(icon["spawn_t"] * fps),
-                "path": icon["path"],
-            }
-        )
-
-    with open("staggered_deluge_rotations_1.json", "w") as f:
-        json.dump(output_data, f)
-
-
 def get_sorting_animations(icons, floor_y=-3.0, spacing=0.5, animate=True):
     # 1. Filter for icons that stayed on the floor
     good_objects = [mob for mob in icons if mob.get_center()[1] >= floor_y]
@@ -2353,9 +2213,6 @@ def get_sorting_animations(icons, floor_y=-3.0, spacing=0.5, animate=True):
     return animations
 
 
-run_staggered_simulation(num_icons=200, duration=20)
-
-
 class EmbeddingUseCase(ThreeDTIMCSlide):
 
     def construct(self):
@@ -2406,7 +2263,6 @@ class EmbeddingUseCase(ThreeDTIMCSlide):
             icon = icon_assets[itype].copy()
             icon.data_type = itype
             icon.current_angle = 0.0
-            # icon.rotate(np.random.random())
             label = Text(txt, font_size=32).next_to(icon, RIGHT, buff=0.5)
 
             # Arrange in a vertical stack
@@ -2423,98 +2279,67 @@ class EmbeddingUseCase(ThreeDTIMCSlide):
         # 2. Fade out labels and prepare icons for the drop
         self.play(FadeOut(intro_labels))
 
-        SKIP_DELUGE = False  # True
-        SKIP_SORT_ANIM = False  # True
-
-        with open("staggered_deluge_rotations_1.json", "r") as f:
+        with open(ICON_DELUGE_SIMULATION, "r") as f:
             sim_data = json.load(f)
 
         icons = Group()
         for icon in intro_icons:
             icons.add(icon)
         for i in range(len(sim_data) - 4):
-            # Assign types for later sorting
             icon_type = np.random.choice(
                 ["text", "img", "video", "audio"], p=[0.5, 0.25, 0.125, 0.125]
             )
-            color = {"text": YELLOW, "img": BLUE, "video": RED, "audio": GREEN}[
-                icon_type
-            ]
 
-            # Using a RoundedRect as a generic icon base
-            # icon = RoundedRectangle(
-            #     corner_radius=0.1, height=0.5, width=0.4, fill_opacity=1, color=color
-            # )
             icon = ImageMobject(f"icons/{icon_type}_small.png")
             icon.data_type = icon_type
             icon.current_angle = 0.0
             icon.set_opacity(0)  # Hide initially
             icons.add(icon)
 
-        if SKIP_DELUGE:
-            # SNAP TO END: No animation, just set final positions
-            total_frames = len(sim_data[0]["path"])
-            last_frame = total_frames - 1
+        self.add(icons)
+        playhead = ValueTracker(0)
 
-            for i, mob in enumerate(icons):
-                # Using the last available frame for each icon in the path data
-                # We check the length because some icons spawn late
-                path = sim_data[i]["path"]
-                if path:
-                    x, y, angle, _ = path[-1]
-                    mob.move_to([x / 100, y / 100, 0])
-                    mob.rotate(angle)
-                    mob.current_angle = angle
+        def update_icons(mobs):
+            current_frame = int(playhead.get_value())
+            for i, mob in enumerate(mobs):
+                if i < 4:
+                    # They are always visible
                     mob.set_opacity(1)
+                    # Use path data. If the deluge hasn't started (frame 0),
+                    # they stay at their intro positions precomputed in Pymunk.
+                    path_idx = current_frame
+                    if path_idx < len(sim_data[i]["path"]):
+                        x, y, angle, _ = sim_data[i]["path"][path_idx]
+                        mob.move_to([x / 100, y / 100, 0])
+                        angle_diff = angle - mob.current_angle
+                        mob.rotate(angle_diff)
+                        mob.current_angle = angle
+                else:
+                    spawn_f = sim_data[i]["spawn_frame"]
 
-            self.add(icons)  # Immediately add them to the screen
-        else:
-            self.add(icons)
-            playhead = ValueTracker(0)
-
-            def update_icons(mobs):
-                current_frame = int(playhead.get_value())
-                for i, mob in enumerate(mobs):
-                    if i < 4:
-                        # They are always visible
+                    if current_frame < spawn_f:
+                        mob.set_opacity(0)
+                    else:
                         mob.set_opacity(1)
-                        # Use path data. If the deluge hasn't started (frame 0),
-                        # they stay at their intro positions precomputed in Pymunk.
-                        path_idx = current_frame
+                        # Index into the path using (current_frame - spawn_frame)
+                        path_idx = current_frame - spawn_f
                         if path_idx < len(sim_data[i]["path"]):
                             x, y, angle, _ = sim_data[i]["path"][path_idx]
                             mob.move_to([x / 100, y / 100, 0])
                             angle_diff = angle - mob.current_angle
                             mob.rotate(angle_diff)
                             mob.current_angle = angle
-                            # mob.set_angle(angle)
-                    else:
-                        spawn_f = sim_data[i]["spawn_frame"]
 
-                        if current_frame < spawn_f:
-                            mob.set_opacity(0)
-                        else:
-                            mob.set_opacity(1)
-                            # Index into the path using (current_frame - spawn_frame)
-                            path_idx = current_frame - spawn_f
-                            if path_idx < len(sim_data[i]["path"]):
-                                x, y, angle, _ = sim_data[i]["path"][path_idx]
-                                mob.move_to([x / 100, y / 100, 0])
-                                angle_diff = angle - mob.current_angle
-                                mob.rotate(angle_diff)
-                                mob.current_angle = angle
-                                # mob.set_angle(angle)
+        icons.add_updater(update_icons)
 
-            icons.add_updater(update_icons)
-
-            n_frames = np.max([len(item["path"]) for item in sim_data])
-            # Adjust run_time to match the duration in the physics script
-            self.play(
-                playhead.animate.set_value(n_frames),
-                run_time=n_frames / 30,
-                rate_func=linear,
-            )
-            icons.remove_updater(update_icons)
+        n_frames = np.max([len(item["path"]) for item in sim_data])
+        # Adjust run_time to match the duration in the physics script
+        self.play(
+            playhead.animate.set_value(n_frames),
+            run_time=n_frames / 30,
+            rate_func=linear,
+        )
+        icons.remove_updater(update_icons)
 
         self.marked_next_slide()
 
@@ -2548,27 +2373,13 @@ class EmbeddingUseCase(ThreeDTIMCSlide):
             elif mob.data_type == "audio":
                 mob.set_z_index(1)
 
-        # Inside your Scene's construct() method:
-        sort_anims = get_sorting_animations(icons, animate=not SKIP_SORT_ANIM)
+        sort_anims = get_sorting_animations(icons, animate=True)
 
-        if SKIP_SORT_ANIM:
-            # We "apply" the animations immediately without self.play
-            # for anim in sort_anims:
-            #     # This reaches into the animation to find the target mobject
-            #     # and moves it to the end state defined in the .animate call
-            #     mob = anim.mobject
-            #     target_pos = anim.target_mobject.get_center()
-            #     mob.move_to(target_pos)
-            #     mob.set_angle(0)
-
-            self.add(icons)  # Ensure they are drawn in their new spots
-            self.wait(0.1)  # Minimal wait to see the result
-        else:
-            self.play(
-                LaggedStart(*sort_anims, lag_ratio=0.05),
-                run_time=3,
-                rate_func=bezier([0, 0, 1, 1]),  # Starts slow, ends snappy
-            )
+        self.play(
+            LaggedStart(*sort_anims, lag_ratio=0.05),
+            run_time=3,
+            rate_func=bezier([0, 0, 1, 1]),  # Starts slow, ends snappy
+        )
         self.marked_next_slide()
 
         self.play(FadeOut(icons))
@@ -2688,16 +2499,10 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
                 "tip_width": 0.15,
             },
         )
-        _, ctree, points_in_pdf_order = fit_hdbscan(
-            SCALED_BASE_DATA, min_cluster_size=2, approx_min_span_tree=False
-        )
-
-        pdf_order_of_points = np.argsort(points_in_pdf_order)
-
-        density_values = np.zeros(base_data.shape[0])
-        for idx, i in enumerate(points_in_pdf_order):
-            row = ctree[ctree["child"] == i]
-            density_values[idx] = np.exp(-(1.0 / row["lambda_val"][0]))
+        ctree = scaled_ctree
+        points_in_pdf_order = scaled_points_in_pdf_order
+        pdf_order_of_points = scaled_pdf_order_of_points
+        density_values = scaled_density_values
 
         lines = VGroup()
 
@@ -2714,7 +2519,6 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
             ).set_opacity(0.0)
             lines.add(line)
 
-        # plot = axes.plot(lambda x: abs(np.sin(x * 5) * np.exp(-x)) + 0.2, color=YELLOW)
         stage_3 = VGroup(axes, lines)
 
         # 1. Adjust the Matrix for a "flatter" look

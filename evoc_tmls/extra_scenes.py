@@ -20,12 +20,20 @@ from config import (
 )
 
 import numpy as np
-from pathlib import Path
+import sklearn.preprocessing
 
-EXTRADATA_DIR = Path(__file__).parent / "data" / "extradata"
+from data_manifest import (
+    BASE_DATA as BASE_DATA_PATH,
+    DATA_COLORMAP as DATA_COLORMAP_PATH,
+)
 
-base_data = (np.load(EXTRADATA_DIR / "base_data.npy") + 0.5) * 10
-data_colormap = np.load(EXTRADATA_DIR / "data_colormap.npy")
+base_data = (np.load(BASE_DATA_PATH) + 0.5) * 10
+data_colormap = np.load(DATA_COLORMAP_PATH)
+
+# Compute fly_away: points radiate outward from center
+fly_away = base_data - (5, 5)
+sklearn.preprocessing.normalize(fly_away, copy=False)
+fly_away *= 30
 
 apply_defaults()
 
@@ -94,23 +102,24 @@ class DistortionLenses(TIMCSlide):
 
         self.marked_next_slide()
 
-        text2 = self.add_title_text("As viewed through the lens of a GMM", font_size=40)
-        self._move_points(gmm_distortion)
-        self.play(FadeOut(text2))
-
-        self.marked_next_slide()
-        self._move_points(base_data)
-
-        self.marked_next_slide()
-
-        text3 = self.add_title_text(
-            "As viewed through the lens of K-Means", font_size=40
-        )
-        self._move_points(kmeans_distortion)
-        self.play(FadeOut(text3))
-
-        self.marked_next_slide()
-        self._move_points(base_data)
+        # TODO: gmm_distortion and kmeans_distortion data not yet generated
+        # text2 = self.add_title_text("As viewed through the lens of a GMM", font_size=40)
+        # self._move_points(gmm_distortion)
+        # self.play(FadeOut(text2))
+        #
+        # self.marked_next_slide()
+        # self._move_points(base_data)
+        #
+        # self.marked_next_slide()
+        #
+        # text3 = self.add_title_text(
+        #     "As viewed through the lens of K-Means", font_size=40
+        # )
+        # self._move_points(kmeans_distortion)
+        # self.play(FadeOut(text3))
+        #
+        # self.marked_next_slide()
+        # self._move_points(base_data)
 
         self.marked_next_slide()
         self._move_points(fly_away, run_time=1.0)
