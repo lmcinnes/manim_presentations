@@ -1,7 +1,7 @@
 """Pymunk physics simulation for the falling icon deluge animation.
 
 Generates a JSON file of icon positions/rotations over time, consumed by
-``EmbeddingUseCase`` in ``slides.py``.
+``TitleAndMotivation`` in ``slides.py``.
 
 Usage:
     python falling_icon_simulation.py          # regenerate (always)

@@ -206,8 +206,8 @@ def compute_barcode(base_data):
 def compute_scaled_hdbscan():
     """Precompute HDBSCAN on SCALED_BASE_DATA for render-time use.
 
-    This mirrors the computation done at render time in SortingDensity and
-    HighDClusteringOverview, saving ctree, pdf-order, and density values.
+    This mirrors the computation done at render time in DensityEstimation and
+    PipelineOverview, saving ctree, pdf-order, and density values.
     """
     raw_data = (np.load(BASE_DATA_PATH) + 0.5) * 10
     order = np.arange(raw_data.shape[0])

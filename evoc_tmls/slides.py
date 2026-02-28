@@ -331,7 +331,7 @@ class PersistenceBarcode(VGroup):
     def add_highlight_updater(self, tracker):
         """
         Mode 1: Static bars that 'light up' when scanner passes over.
-        Used in PersistenceBarcodeAnimation.
+        Used in PersistenceScoring.
         """
 
         def update(bars):
@@ -347,7 +347,7 @@ class PersistenceBarcode(VGroup):
     def add_growing_updater(self, tracker):
         """
         Mode 2: Bars that 'grow' from birth to death as scanner moves.
-        Used in DensityToBarcode.
+        Used in ClusterExtraction.
         """
 
         def update(bars):
@@ -382,7 +382,7 @@ class PersistenceBarcode(VGroup):
 apply_defaults()
 
 
-class EVoCPerformance(TIMCSlide):
+class Benchmarks(TIMCSlide):
 
     def construct(self):
         self.load_state("benefits")
@@ -627,7 +627,7 @@ class EVoCPerformance(TIMCSlide):
         return animations
 
 
-class PersistenceBarcodeAnimation(TIMCSlide):
+class PersistenceScoring(TIMCSlide):
 
     def construct(self):
         # add_logo_to_background(self)
@@ -962,7 +962,7 @@ class PersistenceBarcodeAnimation(TIMCSlide):
         self.save_state("persistence_scores")
 
 
-class DensityToBarcode(TIMCSlide):
+class ClusterExtraction(TIMCSlide):
 
     def construct(self):
 
@@ -1315,7 +1315,7 @@ class DensityToBarcode(TIMCSlide):
         )
 
 
-class KnnEmbeddingStep(ThreeDTIMCSlide):
+class ManifoldLearning(ThreeDTIMCSlide):
 
     def construct(self):
 
@@ -1666,7 +1666,7 @@ class KnnEmbeddingStep(ThreeDTIMCSlide):
         self.save_state("knn_embedding")
 
 
-class SortingDensity(ThreeDTIMCSlide):
+class DensityEstimation(ThreeDTIMCSlide):
 
     def _data_to_screen_distance(self, data_dist):
         point1 = self.graph.c2p(0, 0)
@@ -2013,7 +2013,7 @@ class SortingDensity(ThreeDTIMCSlide):
         self.save_state("sorting_density")
 
 
-class EVoCLogo(ThreeDTIMCSlide):
+class EVoCLogoReveal(ThreeDTIMCSlide):
 
     def construct(self):
 
@@ -2213,7 +2213,7 @@ def get_sorting_animations(icons, floor_y=-3.0, spacing=0.5, animate=True):
     return animations
 
 
-class EmbeddingUseCase(ThreeDTIMCSlide):
+class TitleAndMotivation(ThreeDTIMCSlide):
 
     def construct(self):
         ## TITLE SLIDE
@@ -2399,7 +2399,7 @@ class EmbeddingUseCase(ThreeDTIMCSlide):
         self.save_state("use_case")
 
 
-class HighDClusteringOverview(ThreeDTIMCSlide):
+class PipelineOverview(ThreeDTIMCSlide):
 
     def construct(self):
 
@@ -2688,7 +2688,7 @@ class HighDClusteringOverview(ThreeDTIMCSlide):
         self.save_state("overview")
 
 
-class Benefits(TIMCSlide):
+class EVoCBenefits(TIMCSlide):
 
     def construct(self):
 
@@ -2847,7 +2847,7 @@ class PhaseSlide(object):
         )
 
 
-class PhaseManifold(ThreeDTIMCSlide, PhaseSlide):
+class TransitionToManifold(ThreeDTIMCSlide, PhaseSlide):
 
     def construct(self):
         self.load_state("overview")
@@ -2855,7 +2855,7 @@ class PhaseManifold(ThreeDTIMCSlide, PhaseSlide):
         self.start_section_wipe("Manifold Learning")
 
 
-class PhaseClusters(ThreeDTIMCSlide, PhaseSlide):
+class TransitionToClusters(ThreeDTIMCSlide, PhaseSlide):
 
     def construct(self):
         self.load_state("sorting_density")
@@ -2864,7 +2864,7 @@ class PhaseClusters(ThreeDTIMCSlide, PhaseSlide):
         self.start_section_wipe("Cluster Extraction")
 
 
-class PhaseDensity(ThreeDTIMCSlide, PhaseSlide):
+class TransitionToDensity(ThreeDTIMCSlide, PhaseSlide):
 
     def construct(self):
         self.load_state("knn_embedding")

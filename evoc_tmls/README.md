@@ -76,17 +76,17 @@ and writes per-scene JSON configs into `slides/`.
 To render a single scene:
 
 ```bash
-uv run manim-slides render slides.py SortingDensity
+uv run manim-slides render slides.py DensityEstimation
 ```
 
 ### Present interactively
 
 ```bash
 uv run manim-slides present \
-  EmbeddingUseCase EVoCLogo HighDClusteringOverview \
-  PhaseManifold KnnEmbeddingStep PhaseDensity \
-  SortingDensity PhaseClusters DensityToBarcode \
-  PersistenceBarcodeAnimation Benefits EVoCPerformance Summary
+  TitleAndMotivation EVoCLogoReveal PipelineOverview \
+  TransitionToManifold ManifoldLearning TransitionToDensity \
+  DensityEstimation TransitionToClusters ClusterExtraction \
+  PersistenceScoring EVoCBenefits Benchmarks Summary
 ```
 
 Navigate with arrow keys; press `q` to quit.
@@ -95,10 +95,10 @@ Navigate with arrow keys; press `q` to quit.
 
 ```bash
 uv run manim-slides convert --to html \
-  EmbeddingUseCase EVoCLogo HighDClusteringOverview \
-  PhaseManifold KnnEmbeddingStep PhaseDensity \
-  SortingDensity PhaseClusters DensityToBarcode \
-  PersistenceBarcodeAnimation Benefits EVoCPerformance Summary \
+  TitleAndMotivation EVoCLogoReveal PipelineOverview \
+  TransitionToManifold ManifoldLearning TransitionToDensity \
+  DensityEstimation TransitionToClusters ClusterExtraction \
+  PersistenceScoring EVoCBenefits Benchmarks Summary \
   evoc_tmls.html
 ```
 
@@ -106,10 +106,10 @@ uv run manim-slides convert --to html \
 
 ```bash
 uv run manim-slides convert --to pptx \
-  EmbeddingUseCase EVoCLogo HighDClusteringOverview \
-  PhaseManifold KnnEmbeddingStep PhaseDensity \
-  SortingDensity PhaseClusters DensityToBarcode \
-  PersistenceBarcodeAnimation Benefits EVoCPerformance Summary \
+  TitleAndMotivation EVoCLogoReveal PipelineOverview \
+  TransitionToManifold ManifoldLearning TransitionToDensity \
+  DensityEstimation TransitionToClusters ClusterExtraction \
+  PersistenceScoring EVoCBenefits Benchmarks Summary \
   evoc_tmls.pptx
 ```
 
