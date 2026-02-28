@@ -1,7 +1,4 @@
-from abc import ABC, abstractmethod
-
 from manim import *
-from manim_slides import Slide
 
 import sys
 
@@ -18,15 +15,16 @@ from config import (
     create_styled_axes,
     TIMCSlide,
     ThreeDTIMCSlide,
+    PhaseSlide,
+    colormap_color,
     create_logo,
 )
 
 import numpy as np
 import pandas as pd
-import sklearn.preprocessing
+from sklearn.metrics import pairwise_distances
 import matplotlib.pyplot as plt
 import pickle
-from decimal import Decimal
 from scipy.signal import find_peaks
 import os
 import json
@@ -121,14 +119,11 @@ scaled_points_in_pdf_order = np.load(SCALED_POINTS_IN_PDF_ORDER)
 scaled_pdf_order_of_points = np.argsort(scaled_points_in_pdf_order)
 scaled_density_values = np.load(SCALED_DENSITY_VALUES)
 
-
-def colormap_color(value, vmin, vmax, cmap_name="plasma", power=1.0, invert=False):
-    """Map a scalar value to a manim color via a matplotlib colormap."""
-    normalized = (value - vmin) / (vmax - vmin)
-    if invert:
-        normalized = 1.0 - normalized
-    rgba = plt.get_cmap(cmap_name)(normalized**power)
-    return rgb_to_color(rgba[:3])
+# ---------------------------------------------------------------------------
+# Presentation constants
+# ---------------------------------------------------------------------------
+MAX_BARCODE_TIME = 350  # Upper bound for barcode x-axis / minimum-cluster-size sweep
+COOLING_WINDOW = 100  # Trailing-gradient window for score trace
 
 
 def is_active_cluster(cluster_num, binary_tree, cluster_sizes, minimum_cluster_size):
@@ -613,11 +608,6 @@ class Benchmarks(TIMCSlide):
 
                     move_scale = 3.0 if metric_name == "Time" else 4.0
 
-                    # Heuristic to detect if we are in the "Time" plot which seemed to use 3 in your original script
-                    # This is slightly brittle but matches your specific manual tweaks
-                    if target_axes.y_range[1] > 50:  # Time usually has large Y values
-                        move_scale = 3
-
                     x_coord = 1 + i + (pos[0] - i) * move_scale
                     y_coord = pos[1]
 
@@ -630,9 +620,7 @@ class Benchmarks(TIMCSlide):
 class PersistenceScoring(TIMCSlide):
 
     def construct(self):
-        # add_logo_to_background(self)
-        # self.new_section("Cluster Selection")
-        max_time = 350
+        max_time = MAX_BARCODE_TIME
         barcode_data = barcode_bars[:, :2]
         barcode_weights = barcode_bars.T[2]
         barcode_data = np.minimum(barcode_data, max_time)
@@ -687,26 +675,10 @@ class PersistenceScoring(TIMCSlide):
             buff=0.2,
         )
         bottom_labels = VGroup(y_label, x_label)
-        # Labels
-        # top_label = Text("Persistence Barcode", font_size=24).next_to(ax_top, UP)
-        # bottom_label = Text("Topological Score", font_size=24).next_to(ax_bottom, UP)
-
-        # self.play(Create(ax_top))
         # --- A. The Barcode Lines ---
-        bars = VGroup()
-        for i, (start, end) in enumerate(barcode_data):
-            # Create a line from start to end at height i
-            p1 = ax_top.c2p(start, i + 0.5)
-            p2 = ax_top.c2p(end, i + 0.5)
-            bar = Line(p1, p2, stroke_width=8)
-            # Store the data directly on the mobject for easy access in updater
-            bar.birth = start
-            bar.death = end
-            bar.weight = barcode_weights[i]
-            bar.set_color(interpolate_color(WHITE, ACCENT_COLOR, bar.weight))
-            bars.add(bar)
+        barcode = PersistenceBarcode(ax_top, barcode_data, barcode_weights)
+        bars = barcode.bars
 
-        # self.play(LaggedStart(*[Create(bar) for bar in bars], lag_ratio=0.1))
         self.add(bars)
         self.add(ax_top)
         self.play(Create(ax_bottom), FadeIn(bottom_labels))
@@ -778,7 +750,7 @@ class PersistenceScoring(TIMCSlide):
 
             if len(self.history_points) > 1:
                 trailing_line.set_points_as_corners(self.history_points)
-                cooling_window = 100
+                cooling_window = COOLING_WINDOW
 
                 num_points = len(self.history_points)
                 colors = []
@@ -814,10 +786,10 @@ class PersistenceScoring(TIMCSlide):
         num_points = len(self.history_points)
         for i in range(num_points):
             points_from_end = num_points - 1 - i
-            if points_from_end >= 100:
+            if points_from_end >= COOLING_WINDOW:
                 colors.append(COLOR_CYCLE[0])
             else:
-                alpha = 1.0 - (points_from_end / 100)
+                alpha = 1.0 - (points_from_end / COOLING_WINDOW)
                 colors.append(interpolate_color(COLOR_CYCLE[0], COLOR_CYCLE[1], alpha))
         trailing_line.set_points_as_corners(self.history_points)
         trailing_line.set_stroke(color=colors[::-1], width=4)
@@ -966,9 +938,6 @@ class ClusterExtraction(TIMCSlide):
 
     def construct(self):
 
-        # self.load_state("sorting_density")
-
-        # self.new_section("Cluster Extraction")
         self.end_section_wipe("Cluster Extraction")
 
         self.add_centered_text(
@@ -1030,7 +999,7 @@ class ClusterExtraction(TIMCSlide):
         )
 
         min_cluster_size_scale = NumberLine(
-            [0, 350, 50],
+            [0, MAX_BARCODE_TIME, 50],
             length=6,
             rotation=PI / 2,
             include_numbers=True,
@@ -1116,7 +1085,7 @@ class ClusterExtraction(TIMCSlide):
             return np.exp(-t * 2) * (1.0 + np.sin(t * 7 * PI - PI / 2)) / 2
 
         self.play(
-            tracker.animate.set_value(350),
+            tracker.animate.set_value(MAX_BARCODE_TIME),
             run_time=10,
             rate_func=safe_wiggle,
         )
@@ -1159,14 +1128,13 @@ class ClusterExtraction(TIMCSlide):
         )
 
         new_polygon_group = VGroup(*new_polygons)
-        # self.add(new_polygon_group)
         update_polygons(new_polygon_group)
 
         barcode_data = barcode_bars[:, :2]
         barcode_weights = barcode_bars.T[2]
-        barcode_data = np.minimum(barcode_data, 350)
+        barcode_data = np.minimum(barcode_data, MAX_BARCODE_TIME)
         barcode_axis = Axes(
-            x_range=[0, 350, 25],
+            x_range=[0, MAX_BARCODE_TIME, 25],
             y_range=[0, barcode_data.shape[0] + 1, 10],
             x_length=10,
             y_length=3,
@@ -1275,7 +1243,7 @@ class ClusterExtraction(TIMCSlide):
         new_polygon_group.add_updater(update_polygons)
 
         self.play(
-            tracker.animate.set_value(350),
+            tracker.animate.set_value(MAX_BARCODE_TIME),
             run_time=15,
             rate_func=lambda x: x**3,
         )
@@ -1283,7 +1251,7 @@ class ClusterExtraction(TIMCSlide):
         self.marked_next_slide()
 
         n_bars = barcode_data.shape[0]
-        x_range = [0, 350, 25]
+        x_range = [0, MAX_BARCODE_TIME, 25]
 
         # Top Axes: Barcode
         # y-range is just the index of the bar (0 to n_bars)
@@ -1319,24 +1287,7 @@ class ManifoldLearning(ThreeDTIMCSlide):
 
     def construct(self):
 
-        # self.load_state("overview")
-
-        # self.new_section("Manifold Learning")
-
         self.end_section_wipe("Manifold Learning")
-
-        # self.add_centered_text("Embedding vectors are high dimensional")
-
-        # self.marked_next_slide()
-        # self.clear_slide()
-
-        # self.add_centered_text(
-        #     "High dimensional data presents challenges for distance and density based clustering techniques",
-        #     max_width=0.66,
-        # )
-
-        # self.marked_next_slide()
-        # self.clear_slide()
 
         self.add_centered_text(
             "We need to build a clusterable representation", max_width=0.66
@@ -1723,7 +1674,7 @@ class DensityEstimation(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        dmat = sklearn.metrics.pairwise_distances(scaled_base_data)
+        dmat = pairwise_distances(scaled_base_data)
         neighbors = np.argsort(dmat, axis=1)
         core_neighbors = neighbors[:, 5]
         chosen_example = np.argsort(order)[2296]  # np.argsort(core_distances)[-89]
@@ -2777,74 +2728,6 @@ class Summary(TIMCSlide):
 
         self.play(FadeIn(url))
         self.play(FadeIn(install))
-
-
-class PhaseSlide(object):
-
-    def _pan_to_stages(self, *stage_keys, zoom=2.5, pan_run_time=1.5):
-        """Zoom into embeddings then pan across to each subsequent stage."""
-        with open(os.path.join(self.state_dir, "stage_centers.json")) as f:
-            centers = json.load(f)
-
-        self.play(self.logo.animate.set_opacity(0.0), run_time=0.25)
-        self.move_camera(
-            frame_center=np.array(centers["embeddings"]),
-            zoom=zoom,
-            run_time=pan_run_time,
-            rate_func=smooth,
-        )
-
-        for key in stage_keys:
-            self.move_camera(
-                frame_center=np.array(centers[key]),
-                run_time=pan_run_time,
-                rate_func=smooth,
-            )
-
-    def transition_to_overview(self, run_time_fadeout=1.5, run_time_fadein=0.75):
-        filepath = os.path.join(self.state_dir, "overview.pkl")
-        with open(filepath, "rb") as f:
-            overview_data = pickle.load(f)
-
-        overview_camera = overview_data["camera"]
-        overview_mobs = Group(
-            *[
-                obj
-                for obj in overview_data["mobjects"]
-                if not isinstance(obj, ImageMobject)
-            ]
-        )
-
-        current_mobs = Group(
-            *list(
-                obj
-                for obj in self.mobjects
-                if not isinstance(obj, ImageMobject) and obj != self.logo
-            )
-        )
-
-        self.move_camera(
-            zoom=0.33,
-            added_anims=[
-                FadeOut(current_mobs),
-            ],
-            run_time=2,
-        )
-        self.move_camera(
-            frame_center=overview_camera["frame_center"],
-            zoom=1.0,
-            phi=0,
-            theta=-90 * DEGREES,
-            run_time=0.1,
-        )
-        self.remove(current_mobs)
-
-        self.add(overview_mobs)
-        self.play(
-            FadeIn(overview_mobs),
-            run_time=run_time_fadein,
-            rate_func=smooth,
-        )
 
 
 class TransitionToManifold(ThreeDTIMCSlide, PhaseSlide):
