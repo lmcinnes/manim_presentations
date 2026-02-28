@@ -1,0 +1,23 @@
+[project]
+name = "evoc-tmls"
+version = "0.1.0"
+description = "EVOC TMLS presentation"
+requires-python = ">=3.10"
+dependencies = [
+    "datasets>=4.6.0",
+    "evoc>=0.3.0.post1",
+    "hdbscan>=0.8.41",
+    # Project-specific deps beyond the root
+    "manim>=0.19.1",
+    "manim-slides>=5.5.4",
+    "matplotlib>=3.10.8",
+    "numpy>=1.24.0",
+    "pandas>=2.3.3",
+    "pymunk>=7.2.0",
+    "scipy>=1.10.0",
+    "seaborn>=0.13.2",
+    "umap-learn>=0.5.11",
+]
+
+
+[tool.uv]

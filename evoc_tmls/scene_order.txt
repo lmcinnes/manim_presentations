@@ -1,0 +1,13 @@
+EmbeddingUseCase
+EVoCLogo
+HighDClusteringOverview
+PhaseManifold
+KnnEmbeddingStep
+PhaseDensity
+SortingDensity
+PhaseClusters
+DensityToBarcode
+PersistenceBarcodeAnimation
+Benefits
+EVoCPerformance
+Summary

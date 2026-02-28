@@ -1,0 +1,11 @@
+[project]
+name = "manim-presentations"
+version = "0.1.0"
+description = "Manim presentation toolkit"
+requires-python = ">=3.10"
+dependencies = [
+    "manim>=0.19.1",
+    "manim-slides>=4.1.0",
+]
+
+[tool.uv]

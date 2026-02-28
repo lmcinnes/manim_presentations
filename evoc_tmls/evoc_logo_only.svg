@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="69.729309mm"
+   height="60.790844mm"
+   viewBox="0 0 69.729309 60.790844"
+   version="1.1"
+   id="svg4728"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   sodipodi:docname="evoc_logo_only.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview4730"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="0.71446409"
+     inkscape:cx="133.66662"
+     inkscape:cy="132.26697"
+     inkscape:window-width="3840"
+     inkscape:window-height="2123"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs4725" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-69.937091,-113.66069)">
+    <g
+       id="g755"
+       transform="matrix(0.96449655,0,0,0.96449655,63.122653,-8.178556)">
+      <ellipse
+         style="fill:#2b3e63;fill-opacity:1;stroke-width:0.286873"
+         id="path343"
+         cx="-28.977217"
+         cy="171.24467"
+         rx="16.956238"
+         ry="28.317045"
+         transform="rotate(-29.48468)" />
+      <ellipse
+         style="fill:#456195;stroke-width:0.323761"
+         id="path120"
+         cx="110.06858"
+         cy="132.03746"
+         rx="11.47765"
+         ry="19.875679"
+         transform="matrix(0.86823907,0.49614607,-0.55741146,0.83023639,0,0)" />
+      <ellipse
+         style="fill:#fcaf3e;stroke-width:0.286873"
+         id="path230"
+         cx="35.132099"
+         cy="133.59846"
+         rx="7.6328688"
+         ry="7.2742777" />
+    </g>
+  </g>
+</svg>
