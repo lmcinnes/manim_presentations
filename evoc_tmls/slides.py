@@ -2210,7 +2210,9 @@ class TitleAndMotivation(ThreeDTIMCSlide):
             #     fill_opacity=1,
             #     color=colors[icon_type],
             # )
-            icon_type: SVGMobject(IMAGE_DIR / f"icons/{icon_type}.svg")
+            icon_type: ImageMobject(
+                IMAGE_DIR / f"icons/{icon_type}_small.png"
+            ).scale_to_fit_width(0.4)
             for icon_type in types
         }
 
@@ -2222,7 +2224,7 @@ class TitleAndMotivation(ThreeDTIMCSlide):
             label = Text(txt, font_size=32).next_to(icon, RIGHT, buff=0.5)
 
             # Arrange in a vertical stack
-            group = VGroup(icon, label)
+            group = Group(icon, label)
             group.shift(UP * (1.5 - i * 0.75)).shift(LEFT * 2)  # Spacing them out
 
             intro_icons.add(icon)
@@ -2238,7 +2240,7 @@ class TitleAndMotivation(ThreeDTIMCSlide):
         with open(ICON_DELUGE_SIMULATION, "r") as f:
             sim_data = json.load(f)
 
-        icons = VGroup()
+        icons = Group()
         for icon in intro_icons:
             icons.add(icon)
         for i in range(len(sim_data) - 4):
@@ -2246,7 +2248,9 @@ class TitleAndMotivation(ThreeDTIMCSlide):
                 ["text", "img", "video", "audio"], p=[0.5, 0.25, 0.125, 0.125]
             )
 
-            icon = SVGMobject(IMAGE_DIR / f"icons/{icon_type}.svg")
+            icon = ImageMobject(
+                IMAGE_DIR / f"icons/{icon_type}_small.png"
+            ).scale_to_fit_width(0.4)
             icon.data_type = icon_type
             icon.current_angle = 0.0
             icon.set_opacity(0)  # Hide initially
