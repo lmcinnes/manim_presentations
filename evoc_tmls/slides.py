@@ -37,6 +37,7 @@ from data_manifest import (
     CLUSTER_DENSITY_PROFILES as CLUSTER_DENSITY_PROFILES_PATH,
     CLUSTER_SIZES as CLUSTER_SIZES_PATH,
     CLUSTER_BINARY_TREE as CLUSTER_BINARY_TREE_PATH,
+    IMAGE_DIR,
     EMBEDDING_CARTOON_RAW,
     EMBEDDING_CARTOON_EDGES,
     EVOC_LOGO_DATA,
@@ -1972,7 +1973,7 @@ class EVoCLogoReveal(ThreeDTIMCSlide):
         self.wait(0.5)
         self.clear_slide()
 
-        evoc_logo = SVGMobject("evoc_logo_only.svg").scale(4)
+        evoc_logo = SVGMobject(IMAGE_DIR / "evoc_logo_only.svg").scale(4)
         logo_data = np.load(EVOC_LOGO_DATA)
         labels = np.load(EVOC_LOGO_COLORS)
 
@@ -2168,7 +2169,11 @@ class TitleAndMotivation(ThreeDTIMCSlide):
 
     def construct(self):
         ## TITLE SLIDE
-        logo = SVGMobject("evoc_logo_horizontal.svg").scale(2.0).shift(UP * 0.5)
+        logo = (
+            SVGMobject(IMAGE_DIR / "evoc_logo_horizontal.svg")
+            .scale(2.0)
+            .shift(UP * 0.5)
+        )
         venue = Text(
             "TMLS 2026, Toronto Canada", font_size=48, font="Marcellus SC"
         ).next_to(logo, DOWN, buff=1)
@@ -2205,7 +2210,7 @@ class TitleAndMotivation(ThreeDTIMCSlide):
             #     fill_opacity=1,
             #     color=colors[icon_type],
             # )
-            icon_type: ImageMobject(f"icons/{icon_type}_small.png")
+            icon_type: SVGMobject(IMAGE_DIR / f"icons/{icon_type}.svg")
             for icon_type in types
         }
 
@@ -2217,7 +2222,7 @@ class TitleAndMotivation(ThreeDTIMCSlide):
             label = Text(txt, font_size=32).next_to(icon, RIGHT, buff=0.5)
 
             # Arrange in a vertical stack
-            group = Group(icon, label)
+            group = VGroup(icon, label)
             group.shift(UP * (1.5 - i * 0.75)).shift(LEFT * 2)  # Spacing them out
 
             intro_icons.add(icon)
@@ -2233,7 +2238,7 @@ class TitleAndMotivation(ThreeDTIMCSlide):
         with open(ICON_DELUGE_SIMULATION, "r") as f:
             sim_data = json.load(f)
 
-        icons = Group()
+        icons = VGroup()
         for icon in intro_icons:
             icons.add(icon)
         for i in range(len(sim_data) - 4):
@@ -2241,7 +2246,7 @@ class TitleAndMotivation(ThreeDTIMCSlide):
                 ["text", "img", "video", "audio"], p=[0.5, 0.25, 0.125, 0.125]
             )
 
-            icon = ImageMobject(f"icons/{icon_type}_small.png")
+            icon = SVGMobject(IMAGE_DIR / f"icons/{icon_type}.svg")
             icon.data_type = icon_type
             icon.current_angle = 0.0
             icon.set_opacity(0)  # Hide initially
@@ -2680,7 +2685,11 @@ class Summary(TIMCSlide):
 
         self.clear_slide(run_time=1.0)
 
-        logo = SVGMobject("evoc_logo_horizontal.svg").scale(2.0).shift(RIGHT * 3)
+        logo = (
+            SVGMobject(IMAGE_DIR / "evoc_logo_horizontal.svg")
+            .scale(2.0)
+            .shift(RIGHT * 3)
+        )
 
         # self.play(Create(logo))
         print(list(logo))
