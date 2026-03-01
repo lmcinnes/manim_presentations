@@ -11,7 +11,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
-IMAGE_DIR = BASE_DIR / "images"
+IMAGE_DIR = DATA_DIR / "images"
 
 EXTRADATA_DIR = DATA_DIR / "extradata"
 BENCHMARKS_DIR = DATA_DIR / "benchmarks"
