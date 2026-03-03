@@ -227,16 +227,18 @@ def save_swarm_data(results, prefix):
 
 def _load_datasets():
     """Load all benchmark datasets (may be slow — downloads from HuggingFace)."""
-    ds = load_dataset("Syoy/birdclef_2023_train")
+    ds_cifar = load_dataset("lmcinnes/evoc_bench_cifar100")
+    ds_news = load_dataset("lmcinnes/evoc_bench_20newsgroups")
+    ds_birdclef = load_dataset("Syoy/birdclef_2023_train")
 
-    cifar_data = np.load(EMBEDDING_DIR / "CIFAR100-CLIP-vectors.npy")
-    cifar_target = np.load(EMBEDDING_DIR / "CIFAR100-imageclass.npy")
+    cifar_data = np.asarray(ds_cifar["train"]["embeddings"])
+    cifar_target = np.asarray(ds_cifar["train"]["target"])
 
-    news_data = np.load(EMBEDDING_DIR / "20-newsgroups-sentence-bert-embeddings.npy")
-    news_target = np.load(EMBEDDING_DIR / "20-newsgroups-sentence-targets.npy")
+    news_data = np.asarray(ds_news["train"]["embeddings"])
+    news_target = np.asarray(ds_news["train"]["target"])
 
-    birdclef2023_data = np.asarray(ds["train"]["embeddings"])
-    birdclef2023_target = np.asarray(ds["train"]["primary_label"])
+    birdclef2023_data = np.asarray(ds_birdclef["train"]["embeddings"])
+    birdclef2023_target = np.asarray(ds_birdclef["train"]["primary_label"])
     mask = np.isin(
         birdclef2023_target,
         np.where(np.bincount(birdclef2023_target) > 100)[0],
