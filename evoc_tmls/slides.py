@@ -572,7 +572,7 @@ class Benchmarks(TIMCSlide):
         for i, category in enumerate(categories):
             points_list = swarm_data.get(category, [])
             for pos in points_list:
-                x_coord = 1 + i + (pos[0] - i) * 4
+                x_coord = 1 + i + (pos[0] - i) * 2.0  # Scale x for better spacing
                 y_coord = pos[1]
 
                 dot = Dot(
