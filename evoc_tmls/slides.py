@@ -492,7 +492,7 @@ class Benchmarks(TIMCSlide):
                     y_range=[y_min, y_max, y_step],
                     x_label_tex="Clustering Algorithm",
                     y_label_tex=self._get_metric_label(metric_name),
-                    y_decimal_places=0 if metric_name == "Time" else 2,
+                    y_decimal_places=1 if metric_name == "Time" else 2,
                     x_tick_labels=categories,
                 ).shift(UP * 0.5 + LEFT)
                 new_axes = new_plot_group[0]
@@ -572,7 +572,7 @@ class Benchmarks(TIMCSlide):
         for i, category in enumerate(categories):
             points_list = swarm_data.get(category, [])
             for pos in points_list:
-                x_coord = 1 + i + (pos[0] - i) * 2.0  # Scale x for better spacing
+                x_coord = 1 + i + (pos[0] - i) * 1.5  # Scale x for better spacing
                 y_coord = pos[1]
 
                 dot = Dot(
@@ -2182,6 +2182,8 @@ class TitleAndMotivation(ThreeDTIMCSlide):
         ).next_to(venue, DOWN)
 
         self.add(logo, venue, speaker)
+
+        self.next_slide()
 
         # EMbedding use case
 
