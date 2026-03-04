@@ -285,7 +285,7 @@ def ensure_data():
     """Generate benchmark data only if any output file is missing."""
     if all(p.exists() for p in all_benchmark_files()):
         return
-    print("Some benchmark data files are missing \u2014 regenerating \u2026")
+    print("Some benchmark data files are missing ... regenerating ...")
     regenerate_data()
 
 
