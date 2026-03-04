@@ -231,10 +231,10 @@ def _load_datasets():
     ds_news = load_dataset("lmcinnes/evoc_bench_20newsgroups")
     ds_birdclef = load_dataset("Syoy/birdclef_2023_train")
 
-    cifar_data = np.asarray(ds_cifar["train"]["embeddings"])
+    cifar_data = np.asarray(ds_cifar["train"]["embedding"])
     cifar_target = np.asarray(ds_cifar["train"]["target"])
 
-    news_data = np.asarray(ds_news["train"]["embeddings"])
+    news_data = np.asarray(ds_news["train"]["embedding"])
     news_target = np.asarray(ds_news["train"]["target"])
 
     birdclef2023_data = np.asarray(ds_birdclef["train"]["embeddings"])
@@ -256,6 +256,19 @@ def _load_datasets():
 def regenerate_data():
     """Run all benchmarks and save swarm data (always regenerates)."""
     datasets = _load_datasets()
+
+    # Force JIT compile for EVoC and UMAP+HDBSCAN before timing
+    print("Warming up JIT compilation for EVoC and UMAP+HDBSCAN")
+    EVoC(
+        datasets["cifar"][0][:100],
+        test_target=datasets["cifar"][1][:100],
+        random_state=0,
+    )
+    umap_hdbscan(
+        datasets["cifar"][0][:100], **DATASET_CONFIGS["cifar"]["umap_hdbscan_kwargs"]
+    )
+    print("Running benchmarks")
+
     for name, (data, target) in datasets.items():
         cfg = DATASET_CONFIGS[name]
         results = run_dataset_benchmarks(
