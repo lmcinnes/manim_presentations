@@ -1,0 +1,15 @@
+[project]
+name = "hdtda"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "manim>=0.19.1",
+    "manim-slides>=5.5.4",
+    "numpy>=2.2.6",
+    "persim>=0.3.8",
+    "pot>=0.9.6.post1",
+    "ripser>=0.6.14",
+    "umap-learn>=0.5.12",
+]
