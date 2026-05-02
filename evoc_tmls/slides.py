@@ -1340,6 +1340,74 @@ class ManifoldLearning(ThreeDTIMCSlide):
         self.wait(3)
         self.stop_ambient_camera_rotation()
 
+        # Show scale considerations
+        distances = pairwise_distances(knn_graph_embedding_raw_data)
+        scaling_distance = np.sort(distances[1])[3]
+        target_loc = axes.c2p(*knn_graph_embedding_raw_data[1])
+
+        # 4. Create the translucent sphere
+        sphere = Sphere(
+            radius=1,  # Start with a unit sphere
+            color=COLOR_CYCLE[2],
+            resolution=(32, 32),
+            fill_opacity=0.25,  # Make it translucent
+            stroke_width=0.0,  # Optional: reduces the grid line thickness
+        )
+        sphere.set_color(HIGHLIGHT_COLOR)
+
+        # 5. Scale the sphere based on axis unit sizes
+        sphere.scale(
+            np.array(
+                [
+                    scaling_distance * axes.x_axis.get_unit_size(),
+                    scaling_distance * axes.y_axis.get_unit_size(),
+                    scaling_distance * axes.z_axis.get_unit_size(),
+                ]
+            )
+        )
+
+        # 6. Move it to the target point
+        sphere.move_to(target_loc)
+        self.play(GrowFromCenter(sphere), run_time=2)
+
+        self.marked_next_slide()
+
+        edges = []
+        for _, row in knn_graph_embedding_edges.iterrows():
+            source_idx = int(row["source"])
+            target_idx = int(row["target"])
+            weight = row["weight"]
+
+            if source_idx == 1:
+
+                # Create line between dots
+                edge = Line3D(
+                    start=scatter_dots[source_idx].get_center(),
+                    end=scatter_dots[target_idx].get_center(),
+                    resolution=16,
+                    color=GRAY,
+                    thickness=weight**2 * 0.02,
+                )
+                edges.append(edge)
+
+        self.play(
+            *[GrowFromPoint(edge, edge.get_start()) for edge in edges], run_time=1.5
+        )
+        self.bring_to_front(*scatter_dots)
+        self.marked_next_slide()
+
+        self.play(FadeOut(sphere), *[FadeOut(edge) for edge in edges])
+
+        # scaling_dot = Dot3D(
+        #     point=axes.c2p(
+        #         knn_graph_embedding_raw_data[1]
+        #     ),  # Position it at the origin
+        #     color=HIGHLIGHT_COLOR,
+        #     radius=0.1,
+        #     resolution=(16, 16),
+        # )
+        # self.play(GrowFromCenter(scaling_dot))
+
         edges = []
         for _, row in knn_graph_embedding_edges.iterrows():
             source_idx = int(row["source"])
@@ -1357,7 +1425,7 @@ class ManifoldLearning(ThreeDTIMCSlide):
             edges.append(edge)
 
         self.play(
-            *[GrowFromPoint(edge, edge.get_start()) for edge in edges], run_time=1.5
+            *[GrowFromPoint(edge, edge.get_start()) for edge in edges], run_time=2.5
         )
         self.bring_to_front(*scatter_dots)
 
@@ -1472,7 +1540,11 @@ class ManifoldLearning(ThreeDTIMCSlide):
         for i, (_, row) in enumerate(knn_graph_embedding_edges.iterrows()):
             graph_2d_new.edges[edge_list[i]].set_stroke(width=row["weight"] * 5)
 
-        self.play(ReplacementTransform(graph_2d, graph_2d_new))
+        self.play(
+            ReplacementTransform(graph_2d, graph_2d_new),
+            run_time=8,
+            rate_func=bezier([0, 0.5, 0.5, 1]),
+        )
 
         self.wait(2)
 
@@ -2176,6 +2248,9 @@ class TitleAndMotivation(ThreeDTIMCSlide):
         )
         venue = Text(
             "TMLS 2026, Toronto Canada", font_size=48, font="Marcellus SC"
+            # "RC Meeting 2026, Toronto Canada",
+            font_size=42,
+            font="Marcellus SC",
         ).next_to(logo, DOWN, buff=1)
         speaker = Text(
             "Leland McInnes", color=ACCENT_COLOR, font_size=40, font="Marcellus SC"
@@ -2769,3 +2844,920 @@ class TransitionToDensity(ThreeDTIMCSlide, PhaseSlide):
         self.transition_to_overview()
         self._pan_to_stages("density")
         self.start_section_wipe("Density Clustering")
+
+
+# class PLSCANClusterSelection(TIMCSlide):
+
+#     def construct(self):
+#         self.density_axes = Axes(
+#             x_range=[0, cluster_density_profiles.shape[1], 250],
+#             y_range=[0, 0.66, 0.1],
+#             x_length=10,
+#             y_length=6,
+#             axis_config={
+#                 "include_tip": False,
+#                 "color": DEFAULT_COLOR,
+#                 "include_numbers": True,
+#                 "font_size": 18,
+#             },
+#         )
+#         y_axis_label = self.density_axes.get_y_axis_label(
+#             Text("Estimated density").scale(0.33).rotate(PI / 2),
+#             edge=LEFT,
+#             direction=LEFT,
+#         )
+#         x_axis_label = self.density_axes.get_x_axis_label(
+#             Text("Point index").scale(0.33),
+#             edge=DOWN,
+#             direction=DOWN,
+#         )
+#         self.add(self.density_axes, y_axis_label, x_axis_label)
+
+#         n_points = cluster_density_profiles.shape[1]
+
+#         polygons = []
+#         polygon_sizes = []
+#         x_values = np.arange(n_points)
+#         polygon_color_gradient = color_gradient(
+#             [DEFAULT_COLOR, ACCENT_COLOR, WHITE], 100
+#         )
+
+#         def _gradient_color(idx):
+#             scaled = 1.0 - np.power(cluster_sizes[idx] / x_values.shape[0], 0.2)
+#             cidx = max(0, min(int(scaled * 99), 99))
+#             return polygon_color_gradient[cidx]
+
+#         polygons, polygon_sizes = _build_density_polygons(
+#             self.density_axes,
+#             cluster_density_profiles,
+#             cluster_sizes,
+#             x_values,
+#             _gradient_color,
+#         )
+
+#         self.play(
+#             LaggedStart(
+#                 *[DrawBorderThenFill(polygon) for polygon in polygons], lag_ratio=0.001
+#             )
+#         )
+
+#         min_cluster_size_scale = NumberLine(
+#             [0, MAX_BARCODE_TIME, 50],
+#             length=6,
+#             rotation=PI / 2,
+#             include_numbers=True,
+#             font_size=12,
+#             label_direction=LEFT,
+#         )
+#         min_cluster_size_label = Text("Minimum cluster size", font_size=18).rotate(
+#             PI / 2
+#         )
+#         min_cluster_size_scale.next_to(self.density_axes)
+#         min_cluster_size_label.next_to(min_cluster_size_scale, LEFT, buff=0.1)
+#         size_marker = (
+#             Triangle()
+#             .rotate(-PI / 6)
+#             .scale(0.15)
+#             .set_fill(color=COLOR_CYCLE[1], opacity=1.0)
+#             .set_stroke(color=COLOR_CYCLE[1])
+#         )
+#         size_marker.move_to(min_cluster_size_scale.n2p(0) + RIGHT * 0.15)
+
+#         self.play(
+#             Create(min_cluster_size_scale),
+#             Write(min_cluster_size_label),
+#             FadeIn(size_marker),
+#         )
+
+#         self.marked_next_slide()
+
+#         tracker = ValueTracker(0)
+
+#         def update_size_marker(marker):
+#             t = tracker.get_value()
+#             size_marker.move_to(min_cluster_size_scale.n2p(t) + RIGHT * 0.15)
+
+#         size_marker.add_updater(update_size_marker)
+#         # Create the decimal label
+#         size_label = DecimalNumber(
+#             tracker.get_value(), num_decimal_places=0, include_sign=False, font_size=18
+#         ).set_color(COLOR_CYCLE[1])
+
+#         # Position it relative to the marker
+#         size_label.add_updater(lambda d: d.set_value(tracker.get_value()))
+#         size_label.add_updater(lambda d: d.next_to(size_marker, RIGHT, buff=0.1))
+
+#         self.add(size_label)
+#         polygon_group = VGroup(*polygons)
+#         self.add(polygon_group)
+
+#         def update_polygons(group):
+#             current_threshold = tracker.get_value()
+#             for i, (poly, size) in enumerate(zip(group, polygon_sizes)):
+#                 if (
+#                     is_active_cluster(
+#                         i, cluster_binary_tree, cluster_sizes, current_threshold
+#                     )
+#                     and cluster_sizes[i] >= current_threshold
+#                 ):
+#                     cluster_fill_color = COLOR_CYCLE[1]
+#                 else:
+#                     # cluster_fill_color = interpolate_color(
+#                     #     ACCENT_COLOR,
+#                     #     DEFAULT_COLOR,
+#                     #     np.power(cluster_sizes[i] / x_values.shape[0], 0.25),
+#                     # )
+#                     scaled_color_val = 1.0 - np.power(
+#                         cluster_sizes[i] / x_values.shape[0], 0.2
+#                     )
+#                     color_idx = int(scaled_color_val * 99)
+#                     color_idx = max(0, min(color_idx, 99))
+#                     cluster_fill_color = polygon_color_gradient[color_idx]
+#                 if size < current_threshold:
+#                     opacity = clip(0.1 + (size - current_threshold) / 100, 0.1, 1.0)
+#                     poly.set_fill(color=cluster_fill_color, opacity=opacity)
+#                     # poly.set_fill(color=cluster_fill_color, opacity=0.1)
+#                     poly.set_stroke(width=1, opacity=0.5)
+#                 else:
+#                     poly.set_fill(color=cluster_fill_color, opacity=1.0)
+#                     poly.set_stroke(width=1, opacity=0.5)
+
+#         polygon_group.add_updater(update_polygons)
+
+#         def safe_wiggle(t):
+#             return np.exp(-t * 2) * (1.0 + np.sin(t * 7 * PI - PI / 2)) / 2
+
+#         self.play(
+#             tracker.animate.set_value(MAX_BARCODE_TIME),
+#             run_time=10,
+#             rate_func=safe_wiggle,
+#         )
+#         self.play(
+#             tracker.animate.set_value(15),
+#             run_time=3,
+#             rate_func=linear,
+#         )
+
+#         self.marked_next_slide()
+
+#         new_density_axes = Axes(
+#             x_range=[0, cluster_density_profiles.shape[1], 250],
+#             y_range=[0, 0.66, 0.1],
+#             x_length=10,
+#             y_length=3,
+#             axis_config={
+#                 "include_tip": False,
+#                 "color": DEFAULT_COLOR,
+#                 "include_numbers": True,
+#                 "font_size": 18,
+#             },
+#         ).shift(UP * 2)
+#         new_y_axis_label = new_density_axes.get_y_axis_label(
+#             Text("Estimated density").scale(0.33).rotate(PI / 2),
+#             edge=LEFT,
+#             direction=LEFT,
+#         )
+#         new_x_axis_label = new_density_axes.get_x_axis_label(
+#             Text("Point index").scale(0.33),
+#             edge=DOWN,
+#             direction=DOWN,
+#         )
+#         new_polygons, _ = _build_density_polygons(
+#             new_density_axes,
+#             cluster_density_profiles,
+#             cluster_sizes,
+#             np.arange(n_points),
+#             _gradient_color,
+#         )
+
+#         new_polygon_group = VGroup(*new_polygons)
+#         update_polygons(new_polygon_group)
+
+#         barcode_data = barcode_bars[:, :2]
+#         barcode_weights = barcode_bars.T[2]
+#         barcode_data = np.minimum(barcode_data, MAX_BARCODE_TIME)
+#         barcode_axis = Axes(
+#             x_range=[0, MAX_BARCODE_TIME, 25],
+#             y_range=[0, barcode_data.shape[0] + 1, 10],
+#             x_length=10,
+#             y_length=3,
+#             y_axis_config={"stroke_width": 0, "include_tip": False},
+#             x_axis_config={
+#                 "include_numbers": True,
+#                 "tip_shape": StealthTip,
+#                 "font_size": 12,
+#             },
+#         ).shift(DOWN * 1.5)
+#         new_barcode_axis_label = barcode_axis.get_x_axis_label(
+#             Text("Minimum cluster size", font_size=18),
+#             edge=DOWN,
+#             direction=DOWN,
+#             buff=0.2,
+#         )
+
+#         swing_group = VGroup(min_cluster_size_scale, min_cluster_size_label)
+#         barcode_group = VGroup(barcode_axis, new_barcode_axis_label)
+
+#         # 2. Initialize our new Generalized Barcode
+#         barcode = PersistenceBarcode(
+#             barcode_axis, barcode_data, barcode_weights, stroke_width=6
+#         )
+#         barcode.bars.set_stroke(opacity=0)  # Start invisible for the growth effect
+#         self.add(barcode)
+
+#         barcode.add_growing_updater(tracker)
+
+#         size_marker.remove_updater(update_size_marker)
+#         size_label.clear_updaters()
+
+#         pivot_point = barcode_axis.get_origin()
+
+#         self.play(
+#             FadeOut(min_cluster_size_label),
+#             size_label.animate.set_opacity(0.0),
+#             run_time=0.25,
+#         )
+#         self.play(
+#             # STAGE 1: Physical Rigid Movement
+#             # We move and rotate the old axis as a solid piece
+#             min_cluster_size_scale.animate.rotate(-PI / 2)
+#             .move_to(pivot_point + RIGHT * 4.1)  # Align center roughly
+#             .scale(1.33)
+#             .set_opacity(0.75),  # Slight fade helps the transition
+#             # Move the marker along with it
+#             size_marker.animate.rotate(-PI / 2).move_to(
+#                 barcode_axis.c2p(15, 0) + DOWN * 0.15
+#             ),
+#             size_label.animate.next_to(size_marker, DOWN, buff=0.1),
+#             # Simultaneous density plot transforms
+#             ReplacementTransform(self.density_axes, new_density_axes),
+#             ReplacementTransform(y_axis_label, new_y_axis_label),
+#             ReplacementTransform(x_axis_label, new_x_axis_label),
+#             ReplacementTransform(polygon_group, new_polygon_group),
+#             run_time=1.2,
+#             rate_func=bezier([0, 0, 0.5, 1]),  # Start slow, finish with momentum
+#         )
+#         self.play(
+#             # STAGE 2: The Hand-off
+#             # Now that it's in the right orientation, we morph into the real Axes object
+#             ReplacementTransform(min_cluster_size_scale, barcode_axis.get_x_axis()),
+#             FadeIn(new_barcode_axis_label),  # Fade in the final text labels
+#             run_time=0.8,
+#             rate_func=bezier([0.5, 0, 1, 1]),  # Take over the momentum and snap
+#         )
+
+#         # self.play(
+#         #     # Swing the barcode axis around
+#         #     ReplacementTransform(
+#         #         min_cluster_size_scale, barcode_axis, path_arc=-PI / 2
+#         #     ),
+#         #     # --- 2. THE TYPOGRAPHY (The "Cross-Fade") ---
+#         #     # Fade out old text while fading in new text at the final location
+#         #     FadeOut(min_cluster_size_label),
+#         #     FadeIn(new_barcode_axis_label),
+#         #     ReplacementTransform(self.density_axes, new_density_axes),
+#         #     ReplacementTransform(y_axis_label, new_y_axis_label),
+#         #     ReplacementTransform(x_axis_label, new_x_axis_label),
+#         #     ReplacementTransform(polygon_group, new_polygon_group),
+#         #     # *[
+#         #     #     ReplacementTransform(old_polygon, new_polygon)
+#         #     #     for old_polygon, new_polygon in zip(polygons, new_polygons)
+#         #     # ],
+#         #     # ReplacementTransform(min_cluster_size_scale, barcode_axis),
+#         #     # ReplacementTransform(min_cluster_size_label, new_barcode_axis_label),
+#         #     size_marker.animate,
+#         #     size_marker.animate.rotate(-PI / 2).move_to(
+#         #         barcode_axis.c2p(15, 0) + DOWN * 0.15
+#         #     ),
+#         #     size_label.animate.next_to(size_marker, DOWN, buff=0.1),
+#         # )
+
+#         self.marked_next_slide()
+
+#         def new_update_size_marker(marker):
+#             t = tracker.get_value()
+#             size_marker.move_to(barcode_axis.c2p(t, 0) + DOWN * 0.15)
+
+#         size_marker.add_updater(new_update_size_marker)
+#         size_label.add_updater(lambda d: d.set_value(tracker.get_value()))
+#         size_label.add_updater(lambda d: d.next_to(size_marker, DOWN, buff=0.1))
+
+#         self.play(size_label.animate.set_opacity(1.0), run_time=0.5)
+#         new_polygon_group.add_updater(update_polygons)
+
+#         self.play(
+#             tracker.animate.set_value(MAX_BARCODE_TIME),
+#             run_time=15,
+#             rate_func=lambda x: x**3,
+#         )
+
+#         self.marked_next_slide()
+
+#         n_bars = barcode_data.shape[0]
+#         x_range = [0, MAX_BARCODE_TIME, 25]
+
+#         # Top Axes: Barcode
+#         # y-range is just the index of the bar (0 to n_bars)
+#         ax_top1 = Axes(
+#             x_range=x_range,
+#             y_range=[0, n_bars, n_bars // 10],
+#             x_length=10,
+#             y_length=4,
+#             y_axis_config={"stroke_width": 0, "include_tip": False},
+#             x_axis_config={"include_numbers": False, "tip_shape": StealthTip},
+#         ).move_to([0.0, 0.93294936, 0.0])
+
+#         new_barcode = PersistenceBarcode(ax_top1, barcode_data, barcode_weights)
+
+#         self.play(
+#             FadeOut(
+#                 new_density_axes,
+#                 new_polygon_group,
+#                 new_x_axis_label,
+#                 new_y_axis_label,
+#                 new_barcode_axis_label,
+#                 size_marker,
+#                 size_label,
+#             )
+#         )
+#         self.play(
+#             ReplacementTransform(barcode_axis, ax_top1),
+#             ReplacementTransform(barcode, new_barcode),
+#         )
+
+#         max_time = MAX_BARCODE_TIME
+#         barcode_data = barcode_bars[:, :2]
+#         barcode_weights = barcode_bars.T[2]
+#         barcode_data = np.minimum(barcode_data, max_time)
+#         n_bars = barcode_data.shape[0]
+#         x_values, y_values = persistence_trace.T
+#         score_max = max(y_values)
+#         score_min = min(y_values)
+
+#         # Shared configuration
+#         x_range = [0, max_time, 25]
+#         plot_width = 10
+#         plot_height = 2
+
+#         # Top Axes: Barcode
+#         # y-range is just the index of the bar (0 to n_bars)
+#         ax_top = Axes(
+#             x_range=x_range,
+#             y_range=[0, n_bars, n_bars // 10],
+#             x_length=plot_width,
+#             y_length=plot_height * 2,
+#             y_axis_config={"stroke_width": 0, "include_tip": False},
+#             x_axis_config={"include_numbers": False, "tip_shape": StealthTip},
+#         )
+
+#         # Bottom Axes: Score
+#         ax_bottom = Axes(
+#             x_range=x_range,
+#             y_range=[score_min - 2, score_max + 2, (score_max - score_min) // 5],
+#             x_length=plot_width,
+#             y_length=plot_height * 0.5,
+#             y_axis_config={"include_numbers": False, "include_tip": False},
+#             x_axis_config={
+#                 "tip_shape": StealthTip,
+#                 "include_numbers": True,
+#                 "font_size": 16,
+#             },
+#         )
+
+#         # Group and arrange them vertically
+#         plots = VGroup(ax_top, ax_bottom).arrange(DOWN, buff=0.5)
+#         y_label = ax_bottom.get_y_axis_label(
+#             Paragraph("Persistence\nscore", font_size=36, alignment="center")
+#             .scale(0.5)
+#             .rotate(PI / 2),
+#             edge=LEFT,
+#             direction=LEFT,
+#         )
+#         x_label = ax_bottom.get_x_axis_label(
+#             Text("Minimum cluster size", font_size=36).scale(0.5),
+#             edge=DOWN,
+#             direction=DOWN,
+#             buff=0.2,
+#         )
+#         bottom_labels = VGroup(y_label, x_label)
+#         # --- A. The Barcode Lines ---
+#         barcode = PersistenceBarcode(ax_top, barcode_data, barcode_weights)
+#         self.remove(new_barcode)
+#         self.remove(barcode_axis)
+#         self.remove(ax_top1)
+#         bars = barcode.bars
+
+#         self.add(bars)
+#         self.add(ax_top)
+#         self.play(Create(ax_bottom), FadeIn(bottom_labels))
+
+#         # ---------------------------------------------------------
+#         # 3. CREATE VISUAL ELEMENTS
+#         # ---------------------------------------------------------
+
+#         self.marked_next_slide()
+
+#         # --- B. The Vertical Scanner Line ---
+#         # A tall line spanning the top plot
+#         scanner_line = Line(
+#             start=ax_bottom.c2p(0, y_values[0]),
+#             end=ax_top.c2p(0, n_bars + 1),
+#             color=RED,
+#             stroke_width=2,
+#         )
+#         self.play(GrowFromCenter(scanner_line))
+
+#         # # --- C. The Bottom Score Curve ---
+#         # # We use a Dot that follows the data, and a TracedPath to draw the line
+#         start_score = y_values[0]
+#         score_dot = Dot(color=COLOR_CYCLE[1], radius=0.1)
+#         score_dot.move_to(ax_bottom.c2p(0, start_score))
+#         self.add(score_dot)
+
+#         tracker = ValueTracker(0)
+
+#         def update_scanner(line):
+#             t = tracker.get_value()
+#             current_score_y = np.interp(t, x_values, y_values)
+#             line.set_points_by_ends(
+#                 ax_bottom.c2p(t, current_score_y), ax_top.c2p(t, n_bars + 1)
+#             )
+
+#         scanner_line.add_updater(update_scanner)
+
+#         def update_bars(bar_group):
+#             t = tracker.get_value()
+#             for bar in bar_group:
+#                 # Check intersection: birth <= t <= death
+#                 if bar.birth <= t <= bar.death:
+#                     bar.set_color(
+#                         interpolate_color(
+#                             WHITE, COLOR_CYCLE[1], min(1, bar.weight**2 + 0.1)
+#                         )
+#                     )
+#                     # bar.set_stroke(width=6)
+#                 else:
+#                     bar.set_color(
+#                         interpolate_color(
+#                             WHITE, ACCENT_COLOR, min(1, bar.weight**2 + 0.1)
+#                         )
+#                     )
+
+#         bars.add_updater(update_bars)
+
+#         self.history_points = [ax_bottom.c2p(0, y_values[0])]
+#         trailing_line = VMobject()
+#         self.add(trailing_line)
+
+#         def update_score_dot(dot):
+#             t = tracker.get_value()
+#             current_y = np.interp(t, x_values, y_values)
+#             new_pos = ax_bottom.c2p(t, current_y)
+#             dot.move_to(new_pos)
+#             self.history_points.append(new_pos)
+
+#             if len(self.history_points) > 1:
+#                 trailing_line.set_points_as_corners(self.history_points)
+#                 cooling_window = COOLING_WINDOW
+
+#                 num_points = len(self.history_points)
+#                 colors = []
+#                 for i in range(num_points):
+#                     points_from_end = num_points - 1 - i
+
+#                     if points_from_end >= cooling_window:
+#                         colors.append(COLOR_CYCLE[0])
+#                     else:
+#                         alpha = 1.0 - (points_from_end / cooling_window)
+#                         colors.append(
+#                             interpolate_color(COLOR_CYCLE[0], COLOR_CYCLE[1], alpha)
+#                         )
+
+#                 trailing_line.set_stroke(color=colors[::-1], width=4)
+
+#         score_dot.add_updater(update_score_dot)
+
+#         self.play(tracker.animate.set_value(max_time), run_time=10, rate_func=linear)
+
+#         self.next_slide()
+
+#         self.history_points = []
+#         line_plot_xs = []
+#         line_plot_ys = []
+#         for t in np.linspace(0, max_time, int(config.frame_rate * 10)):
+#             current_y = np.interp(t, x_values, y_values)
+#             new_pos = ax_bottom.c2p(t, current_y)
+#             line_plot_xs.append(t)
+#             line_plot_ys.append(current_y)
+#             self.history_points.append(new_pos)
+#         colors = []
+#         num_points = len(self.history_points)
+#         for i in range(num_points):
+#             points_from_end = num_points - 1 - i
+#             if points_from_end >= COOLING_WINDOW:
+#                 colors.append(COLOR_CYCLE[0])
+#             else:
+#                 alpha = 1.0 - (points_from_end / COOLING_WINDOW)
+#                 colors.append(interpolate_color(COLOR_CYCLE[0], COLOR_CYCLE[1], alpha))
+#         trailing_line.set_points_as_corners(self.history_points)
+#         trailing_line.set_stroke(color=colors[::-1], width=4)
+#         self.play(
+#             FadeOut(scanner_line),
+#             FadeOut(score_dot),
+#             trailing_line.animate.set_stroke(color=COLOR_CYCLE[0], width=4),
+#         )
+#         self.play(FadeOut(ax_top, bars))
+#         new_ax_bottom = Axes(
+#             x_range=x_range,  # Keep same x-range
+#             y_range=[score_min - 2, score_max + 2, (score_max - score_min) // 5],
+#             x_length=plot_width,  # Same width
+#             y_length=plot_height
+#             * 1.8,  # Make it 1.8 times as tall (or whatever factor)
+#             y_axis_config={"include_numbers": False, "include_tip": False},
+#             x_axis_config={
+#                 "tip_shape": StealthTip,
+#                 "include_numbers": True,
+#                 "font_size": 16,
+#             },
+#         )
+#         new_y_label = new_ax_bottom.get_y_axis_label(
+#             Paragraph("Persistence\nscore", font_size=36, alignment="center")
+#             .scale(0.5)
+#             .rotate(PI / 2),
+#             edge=LEFT,
+#             direction=LEFT,
+#         )
+#         new_x_label = new_ax_bottom.get_x_axis_label(
+#             Text("Minimum cluster size", font_size=36).scale(0.5),
+#             edge=DOWN,
+#             direction=DOWN,
+#             buff=0.2,
+#         )
+#         new_bottom_labels = VGroup(new_y_label, new_x_label)
+
+#         # Create the new line on the new axes
+#         new_points = [
+#             new_ax_bottom.c2p(x, y) for x, y in zip(line_plot_xs, line_plot_ys)
+#         ]
+#         new_trailing_line = VMobject()
+#         new_trailing_line.set_points_as_corners(new_points)
+#         new_trailing_line.set_stroke(color=COLOR_CYCLE[0], width=4)
+
+#         # Animate the transition
+#         self.play(
+#             Transform(ax_bottom, new_ax_bottom),
+#             Transform(trailing_line, new_trailing_line),
+#             Transform(bottom_labels, new_bottom_labels),
+#         )
+
+#         self.wait(1)
+
+#         peak_idxs = find_peaks(persistence_trace.T[1])[0]
+#         peak_sizes = persistence_trace.T[0][peak_idxs]
+#         peak_scores = persistence_trace.T[1][peak_idxs]
+
+#         maxima_idx = np.argmax(peak_scores)
+#         maxima_size = peak_sizes[maxima_idx]
+#         maxima_score = peak_scores[maxima_idx]
+#         maxima_annotation_arrow = Arrow(
+#             start=new_ax_bottom.c2p(maxima_size, maxima_score) + UP,
+#             end=new_ax_bottom.c2p(maxima_size, maxima_score),
+#             buff=0.1,
+#             color=COLOR_CYCLE[3],
+#             stroke_width=8,
+#             max_tip_length_to_length_ratio=0.3,
+#             max_stroke_width_to_length_ratio=10,
+#         )
+#         maxima_annotation_text = Paragraph(
+#             "Maximal\npersistence\nscore",
+#             font_size=24,
+#             color=COLOR_CYCLE[3],
+#             stroke_color=COLOR_CYCLE[3],
+#             alignment="center",
+#         ).next_to(maxima_annotation_arrow, UP, buff=0.2)
+#         self.play(Create(maxima_annotation_arrow), Write(maxima_annotation_text))
+#         self.wait(1)
+
+#         green = COLOR_CYCLE[2]  # interpolate_color(WHITE, COLOR_CYCLE[3], 0.66)
+#         local_maxima_arrows = []
+#         for peak_size, peak_score in zip(peak_sizes, peak_scores):
+#             if peak_score == maxima_score:
+#                 continue
+#             local_maxima_arrows.append(
+#                 Arrow(
+#                     start=new_ax_bottom.c2p(peak_size, peak_score) + UP,
+#                     end=new_ax_bottom.c2p(peak_size, peak_score),
+#                     buff=0.1,
+#                     color=green,
+#                     stroke_width=4,
+#                     max_tip_length_to_length_ratio=0.2,
+#                     max_stroke_width_to_length_ratio=10,
+#                 )
+#             )
+#         local_maxima_text = Text(
+#             "Other local maxima",
+#             color=green,
+#             stroke_color=green,
+#             font_size=24,
+#         ).shift(LEFT * 2)
+#         self.play(
+#             *[Create(arrow) for arrow in local_maxima_arrows], Write(local_maxima_text)
+#         )
+
+#         self.wait(1)
+
+#         self.wait(1)
+#         self.play(
+#             *[
+#                 mob.animate.shift(RIGHT * 15)
+#                 for mob in self.mobjects
+#                 if mob != self.logo
+#             ],
+#             run_time=1,
+#         )
+#         self.clear()
+#         add_logo_to_background(self)
+
+#         line1 = Text(
+#             "The maximum score defines",
+#             font_size=64,
+#             t2c={"maximum score": COLOR_CYCLE[3]},
+#         )
+#         line3 = Text("the default cluster resolution", font_size=64)
+
+#         paragraph1 = VGroup(line1, line3).arrange(DOWN, buff=0.2)
+
+#         line4 = Text("Other local maxima", font_size=64, t2c={"local maxima": green})
+#         line5 = Text("provide alternative layers", font_size=64)
+#         line6 = Text("of cluster resolution", font_size=64)
+#         line5.next_to(line4, DOWN, buff=0.15)
+#         line6.next_to(line5, DOWN, buff=-0.05)
+
+#         paragraph2 = VGroup(line4, line5, line6)
+
+#         final_text = VGroup(paragraph1, paragraph2).arrange(DOWN, buff=1.25)
+
+#         self.play(Write(final_text))
+
+
+# class PipelineOverviewScene(ThreeDTIMCSlide):
+
+#     def construct(self):
+#         self.play(Write(Text("The Process", font_size=56).shift(UP * 2.5)))
+
+#         self.wait()
+
+#         # --- 1. THE DATA STRUCTURES ---
+#         # A. Hypercube Embeddings
+#         # --- Setup Layout ---
+#         # Create placeholders to define where each stage lives on screen
+#         stage_1_placeholder = VectorizedPoint().shift(LEFT * 4.5)
+
+#         # --- Create Stage 1 ---
+#         cube = Cube(side_length=1.5)
+#         cube.set_stroke(GRAY, 1)
+#         cube.set_fill(WHITE, opacity=0.05)
+
+#         rng = np.random.RandomState(42)
+
+#         dots_cube = VGroup(
+#             *[
+#                 Dot3D(
+#                     point=[rng.uniform(-0.6, 0.6) for _ in range(3)],
+#                     radius=0.03,
+#                     color=DEFAULT_COLOR,
+#                 ).set_opacity(
+#                     rng.uniform(0.3, 1.0)
+#                 )  # Simplified depth hint
+#                 for _ in range(40)
+#             ]
+#         )
+
+#         stage_1 = VGroup(cube, dots_cube)
+#         stage_1.move_to(stage_1_placeholder)  # Fixes it in the "left slot"
+
+#         # B. UMAP Blobs
+#         manifold_axes = Axes(
+#             x_range=[0, 1.2, 1],
+#             y_range=[0, 1, 1],
+#             x_length=2,
+#             y_length=1.5,
+#             axis_config={
+#                 "include_tip": True,
+#                 "include_ticks": False,
+#                 "tip_shape": StealthTip,
+#                 "tip_height": 0.15,
+#                 "tip_width": 0.15,
+#             },
+#         )
+#         blob_centers = [
+#             LEFT * 0.3 + UP * 0.2,
+#             RIGHT * 0.4,
+#             DOWN * 0.6,
+#             LEFT + 0.4 + DOWN * 0.3,
+#         ]
+#         dots_blobs = VGroup(
+#             *[
+#                 Dot(
+#                     rng.normal(c, 0.1),
+#                     radius=0.04,
+#                     color=ACCENT_COLOR,
+#                 ).set_opacity(0.75)
+#                 for c in blob_centers
+#                 for _ in range(15)
+#             ]
+#         )
+#         stage_2 = VGroup(manifold_axes, dots_blobs)
+
+#         # C. Reachability Plot (Cartoon version)
+#         axes = Axes(
+#             x_range=[0, 1.2, 1],
+#             y_range=[0, 1, 1],
+#             x_length=2,
+#             y_length=1.5,
+#             axis_config={
+#                 "include_tip": True,
+#                 "include_ticks": False,
+#                 "tip_shape": StealthTip,
+#                 "tip_height": 0.15,
+#                 "tip_width": 0.15,
+#             },
+#         )
+#         ctree = scaled_ctree
+#         points_in_pdf_order = scaled_points_in_pdf_order
+#         pdf_order_of_points = scaled_pdf_order_of_points
+#         density_values = scaled_density_values
+
+#         lines = VGroup()
+
+#         max_density = density_values.max()
+#         min_density = density_values.min()
+
+#         for idx in range(base_data.shape[0]):
+#             x_pos = idx / base_data.shape[0]
+#             line = Line(
+#                 start=axes.c2p(x_pos, 0),
+#                 end=axes.c2p(x_pos, density_values[idx]),
+#                 stroke_width=0.5,
+#                 color=colormap_color(density_values[idx], min_density, max_density),
+#             ).set_opacity(0.0)
+#             lines.add(line)
+
+#         stage_3 = VGroup(axes, lines)
+
+#         # 1. Adjust the Matrix for a "flatter" look
+#         # Lowering the [1][1] value or stretching the Y axis down makes it flatter
+#         shear_matrix = [[1, 1.2, 0], [0, 0.6, 0], [0, 0, 1]]
+
+#         # 2. Define persistent centers (to ensure hierarchy/no overlaps)
+#         # These are the "seeds" for the clusters
+#         base_centers = [
+#             [-0.7, -0.2, 0],
+#             [0.7, 0.2, 0],  # Group A
+#             [-0.1, 0.3, 0],
+#             [0.2, -0.3, 0],  # Group B
+#             [0.8, -0.2, 0],  # Group C
+#         ]
+
+#         layers = VGroup()
+#         for i in range(3):
+#             # Create the base sheet
+#             sheet = Rectangle(width=3.0, height=1.5)
+#             sheet.set_stroke(GRAY, 1)
+#             sheet.set_fill(interpolate_color(WHITE, GRAY, 0.15), opacity=0.9)
+
+#             # Determine which centers to keep for this "resolution" layer
+#             # Layer 0: all, Layer 1: subset, Layer 2: one large "global" cluster
+#             if i == 0:
+#                 current_centers = base_centers
+#                 r = 0.15
+#             elif i == 1:
+#                 current_centers = [base_centers[0], base_centers[2], base_centers[4]]
+#                 r = 0.3
+#             else:
+#                 current_centers = [[0, 0, 0]]
+#                 r = 0.6
+
+#             clusters = VGroup(
+#                 *[
+#                     Circle(
+#                         radius=r,
+#                         color=interpolate_color(ACCENT_COLOR, DEFAULT_COLOR, i / 2.5),
+#                         fill_opacity=0.4,
+#                         stroke_width=2,
+#                     ).move_to(loc)
+#                     for loc in current_centers
+#                 ]
+#             )
+
+#             layer = VGroup(sheet, clusters)
+
+#             # Apply the flattening transformation
+#             layer.apply_matrix(shear_matrix)
+
+#             # Stack them with decreasing opacity to give "depth"
+#             layer.set_opacity(1.0 - (i * 0.15))
+#             # layer.move_to(stage_4_placeholder)
+#             # layer.shift(UP * i * 0.6)
+#             layers.add(layer)
+
+#         # 2. Create an invisible 'Space Holder'
+#         # This should match the total height of your FINAL spread (e.g., sheet height + total shift)
+#         proxy_box = Rectangle(
+#             width=3.0,
+#             height=1.0 + (2 * 0.33),  # Sheet height + total UP shift
+#             stroke_opacity=0,
+#             fill_opacity=0,
+#         )
+#         proxy_box.align_to(layers[0], DOWN)
+#         stage_4 = VGroup(proxy_box, layers.scale(0.6))
+
+#         # --- 2. LAYOUT ---
+#         pipeline = VGroup(stage_1, stage_2, stage_3, stage_4).arrange(RIGHT, buff=1.5)
+#         pipeline.set_width(config.frame_width * 0.9)
+
+#         # Labels
+#         labels = VGroup(
+#             Text("Embeddings", font_size=20).next_to(stage_1, DOWN),
+#             Text("Manifold", font_size=20).next_to(stage_2, DOWN),
+#             Text("Density", font_size=20).next_to(stage_3, DOWN),
+#             Text("Multiscale Clusters", font_size=20).next_to(stage_4, DOWN),
+#         )
+
+#         # --- 3. ANIMATION STEPS ---
+
+#         # --- Animation ---
+#         self.play(FadeIn(stage_1), run_time=1.0)
+
+#         # Rotate around its own center, not the screen origin
+#         self.play(
+#             Rotate(
+#                 stage_1,
+#                 angle=2 * PI,
+#                 axis=np.array([1, 1, 1]),  # Diagonal axis for a "dynamic" spin
+#                 about_point=stage_1.get_center(),
+#                 run_time=1.5,
+#                 rate_func=smooth,
+#             ),
+#             Write(labels[0]),
+#         )
+#         self.wait(2)
+
+#         # Reveal next stage with an arrow
+#         arrow1 = Arrow(stage_1.get_right(), stage_2.get_left(), buff=0.1)
+#         self.play(
+#             GrowArrow(arrow1),
+#             ReplacementTransform(stage_1[1].copy(), dots_blobs.scale(1.1)),
+#             Write(labels[1]),
+#         )
+#         self.wait(2)
+
+#         arrow2 = Arrow(stage_2.get_right(), stage_3.get_left(), buff=0.1)
+#         self.play(GrowArrow(arrow2), Create(axes), Write(labels[2]))
+#         for line in lines:
+#             line.set_opacity(1.0)
+#         self.play(*[Create(line) for line in lines])
+#         self.wait(2)
+
+#         arrow3 = Arrow(stage_3.get_right(), stage_4.get_left(), buff=0.1)
+#         self.play(GrowArrow(arrow3), FadeIn(stage_4))
+#         self.play(
+#             layers[1].animate.shift(UP * 0.33).set_rate_func(rush_into),
+#             layers[2].animate.shift(UP * 0.66).set_rate_func(rush_into),
+#             Write(labels[3]),
+#         )
+
+#         self.wait(0.1)
+#         self.wait(2)
+
+#         # Curved annotation arrows
+#         _create_curved_annotation(
+#             self,
+#             "Manifold learning\n(e.g. UMAP)",
+#             LEFT * 4.5,
+#             arrow1,
+#             (UP * 1.5 + LEFT * 0.5, DOWN + RIGHT * 0.5),
+#             18 * DEGREES,
+#         )
+#         self.wait(1)
+
+#         _create_curved_annotation(
+#             self,
+#             "Density Clustering\n(e.g. HDBSCAN)",
+#             LEFT * 0.1 + UP * 0.5,
+#             arrow2,
+#             (UP * 1 + RIGHT * 0.15, DOWN + LEFT * 0.15),
+#             -18 * DEGREES,
+#         )
+#         self.wait(1)
+
+#         _create_curved_annotation(
+#             self,
+#             "Resolution Persistence\n(e.g. PLSCAN)",
+#             RIGHT * 4.5,
+#             arrow3,
+#             (UP * 1.25 + LEFT * 0.25, DOWN + LEFT * 0.25),
+#             -18 * DEGREES,
+#         )
+
+#         self.wait(2)
