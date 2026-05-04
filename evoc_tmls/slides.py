@@ -37,6 +37,7 @@ from data_manifest import (
     CLUSTER_DENSITY_PROFILES as CLUSTER_DENSITY_PROFILES_PATH,
     CLUSTER_SIZES as CLUSTER_SIZES_PATH,
     CLUSTER_BINARY_TREE as CLUSTER_BINARY_TREE_PATH,
+    BENCHMARKS_DIR,
     IMAGE_DIR,
     EMBEDDING_CARTOON_RAW,
     EMBEDDING_CARTOON_EDGES,
@@ -458,6 +459,31 @@ class Benchmarks(TIMCSlide):
                     ),
                 },
             },
+            {
+                "name_lines": [
+                    "Clustering",
+                    "results for",
+                    "MNIST",
+                    "Handwritten",
+                    "Digits",
+                    "Embedded with",
+                    "Raw Pixel Values",
+                ],
+                "data": {
+                    "ARI": (
+                        benchmark_data["mnist"]["ari"]["swarms"],
+                        benchmark_data["mnist"]["ari"]["yticks"],
+                    ),
+                    "Score": (
+                        benchmark_data["mnist"]["cs"]["swarms"],
+                        benchmark_data["mnist"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["mnist"]["time"]["swarms"],
+                        benchmark_data["mnist"]["time"]["yticks"],
+                    ),
+                },
+            },
         ]
 
         categories = ["K-Means", "UMAP+HDBSCAN", "EVoC"]
@@ -536,7 +562,7 @@ class Benchmarks(TIMCSlide):
                 self.marked_next_slide()
 
             # --- 4. Cleanup before next dataset ---
-            if not "Classifier" in dataset["name_lines"]:
+            if not "MNIST" in dataset["name_lines"]:
                 self.play(
                     FadeOut(current_plot_group),
                     FadeOut(current_dots),
@@ -607,7 +633,7 @@ class Benchmarks(TIMCSlide):
                 if j < len(target_positions):
                     pos = target_positions[j]
 
-                    move_scale = 3.0 if metric_name == "Time" else 4.0
+                    move_scale = 1.5 if metric_name == "Time" else 1.5
 
                     x_coord = 1 + i + (pos[0] - i) * move_scale
                     y_coord = pos[1]
@@ -1342,61 +1368,62 @@ class ManifoldLearning(ThreeDTIMCSlide):
 
         # Show scale considerations
         distances = pairwise_distances(knn_graph_embedding_raw_data)
-        scaling_distance = np.sort(distances[1])[3]
-        target_loc = axes.c2p(*knn_graph_embedding_raw_data[1])
+        for i in [1, 4, 11, 8, 15, 19]:  # Example indices to highlight different points
+            scaling_distance = np.sort(distances[i])[3]
+            target_loc = axes.c2p(*knn_graph_embedding_raw_data[i])
 
-        # 4. Create the translucent sphere
-        sphere = Sphere(
-            radius=1,  # Start with a unit sphere
-            color=COLOR_CYCLE[2],
-            resolution=(32, 32),
-            fill_opacity=0.25,  # Make it translucent
-            stroke_width=0.0,  # Optional: reduces the grid line thickness
-        )
-        sphere.set_color(HIGHLIGHT_COLOR)
-
-        # 5. Scale the sphere based on axis unit sizes
-        sphere.scale(
-            np.array(
-                [
-                    scaling_distance * axes.x_axis.get_unit_size(),
-                    scaling_distance * axes.y_axis.get_unit_size(),
-                    scaling_distance * axes.z_axis.get_unit_size(),
-                ]
+            # 4. Create the translucent sphere
+            sphere = Sphere(
+                radius=1,  # Start with a unit sphere
+                color=COLOR_CYCLE[2],
+                resolution=(32, 32),
+                fill_opacity=0.25,  # Make it translucent
+                stroke_width=0.0,  # Optional: reduces the grid line thickness
             )
-        )
+            sphere.set_color(HIGHLIGHT_COLOR)
 
-        # 6. Move it to the target point
-        sphere.move_to(target_loc)
-        self.play(GrowFromCenter(sphere), run_time=2)
-
-        self.marked_next_slide()
-
-        edges = []
-        for _, row in knn_graph_embedding_edges.iterrows():
-            source_idx = int(row["source"])
-            target_idx = int(row["target"])
-            weight = row["weight"]
-
-            if source_idx == 1:
-
-                # Create line between dots
-                edge = Line3D(
-                    start=scatter_dots[source_idx].get_center(),
-                    end=scatter_dots[target_idx].get_center(),
-                    resolution=16,
-                    color=GRAY,
-                    thickness=weight**2 * 0.02,
+            # 5. Scale the sphere based on axis unit sizes
+            sphere.scale(
+                np.array(
+                    [
+                        scaling_distance * axes.x_axis.get_unit_size(),
+                        scaling_distance * axes.y_axis.get_unit_size(),
+                        scaling_distance * axes.z_axis.get_unit_size(),
+                    ]
                 )
-                edges.append(edge)
+            )
 
-        self.play(
-            *[GrowFromPoint(edge, edge.get_start()) for edge in edges], run_time=1.5
-        )
-        self.bring_to_front(*scatter_dots)
-        self.marked_next_slide()
+            # 6. Move it to the target point
+            sphere.move_to(target_loc)
+            self.play(GrowFromCenter(sphere), run_time=2)
 
-        self.play(FadeOut(sphere), *[FadeOut(edge) for edge in edges])
+            self.marked_next_slide()
+
+            edges = []
+            for _, row in knn_graph_embedding_edges.iterrows():
+                source_idx = int(row["source"])
+                target_idx = int(row["target"])
+                weight = row["weight"]
+
+                if source_idx == i:
+
+                    # Create line between dots
+                    edge = Line3D(
+                        start=scatter_dots[source_idx].get_center(),
+                        end=scatter_dots[target_idx].get_center(),
+                        resolution=16,
+                        color=GRAY,
+                        thickness=weight**2 * 0.02,
+                    )
+                    edges.append(edge)
+
+            self.play(
+                *[GrowFromPoint(edge, edge.get_start()) for edge in edges], run_time=1.5
+            )
+            self.bring_to_front(*scatter_dots)
+            self.marked_next_slide()
+
+            self.play(FadeOut(sphere), *[FadeOut(edge) for edge in edges])
 
         # scaling_dot = Dot3D(
         #     point=axes.c2p(
@@ -1491,7 +1518,7 @@ class ManifoldLearning(ThreeDTIMCSlide):
         self.play(*vertex_transforms, *line_replacements, run_time=0.5)
         self.play(edge_transforms, run_time=0.25)
 
-        # Create 2D axes (using Axes, not ThreeDAxes)
+        # # Create 2D axes (using Axes, not ThreeDAxes)
         axes_2d = Axes(
             x_range=[0, 10, 2],
             y_range=[0, 10, 2],
@@ -2247,13 +2274,18 @@ class TitleAndMotivation(ThreeDTIMCSlide):
             .shift(UP * 0.5)
         )
         venue = Text(
-            "TMLS 2026, Toronto Canada", font_size=48, font="Marcellus SC"
-            # "RC Meeting 2026, Toronto Canada",
-            font_size=42,
+            "TMLS 2026, Toronto Canada",
+            font_size=48,
             font="Marcellus SC",
+            # "RC Meeting 2026, Toronto Canada",
+            # font_size=42,
+            # font="Marcellus SC",
         ).next_to(logo, DOWN, buff=1)
         speaker = Text(
-            "Leland McInnes", color=ACCENT_COLOR, font_size=40, font="Marcellus SC"
+            "Leland McInnes",
+            color=ACCENT_COLOR,
+            font_size=40,
+            font="Marcellus SC",
         ).next_to(venue, DOWN)
 
         self.add(logo, venue, speaker)
@@ -2754,7 +2786,7 @@ class Summary(TIMCSlide):
 
     def construct(self):
 
-        self.load_state("evoc_performance")
+        self.load_state("scaling_performance")
 
         self.new_section("Summary")
 
@@ -2844,6 +2876,172 @@ class TransitionToDensity(ThreeDTIMCSlide, PhaseSlide):
         self.transition_to_overview()
         self._pan_to_stages("density")
         self.start_section_wipe("Density Clustering")
+
+
+class ScalingPerformance(TIMCSlide):
+
+    def construct(self):
+
+        self.load_state("evoc_performance")
+
+        self.clear_slide(run_time=1.0)
+
+        # 1. Setup Mock Data (Same logic as before)
+        algorithms = ["UMAP + HDBSCAN", "K-Means", "Minibatch K-Means", "EVōC"]
+        colors = [
+            DEFAULT_COLOR,
+            DEFAULT_COLOR.interpolate(ACCENT_COLOR, 0.75),
+            ACCENT_COLOR.interpolate(WHITE, 0.5),
+            HIGHLIGHT_COLOR,
+        ]
+        # data_list = []
+        # for alg in algorithms:
+        #     sizes = np.linspace(100, 1000, 12)
+        #     # Power law: Time = k * Size^power
+        #     power = 2.0 if alg == "K-Means" else 1.5 if alg == "DBSCAN" else 1.1
+        #     times = (sizes / 100) ** power + np.random.normal(0, 0.5, 12)
+        #     for s, t in zip(sizes, times):
+        #         data_list.append({"size": s, "time": max(0.1, t), "algorithm": alg})
+
+        # df = pd.DataFrame(data_list)
+        df = pd.read_csv(BENCHMARKS_DIR / "scaling_benchmark_results.csv")
+
+        sorted_algs = (
+            df.groupby("algorithm")["time"]
+            .max()
+            .sort_values(ascending=False)
+            .index.tolist()
+        )
+
+        # 2. Coordinate Systems
+        ax_lin = Axes(
+            x_range=[0, 1_200_000, 250_000],
+            y_range=[0, round(df["time"].max() + 5, -1), 50],
+            x_length=9,
+            y_length=5.5,
+            axis_config={"include_tip": False},
+        ).add_coordinates()
+
+        ax_log = Axes(
+            x_range=[4, 6.5],  # log10(100) to log10(1000ish)
+            y_range=[-1, 3.0],  # log10(0.1) to log10(100ish)
+            x_length=9,
+            y_length=5.5,
+            x_axis_config={"scaling": LogBase(10)},
+            y_axis_config={"scaling": LogBase(10)},
+            axis_config={"include_tip": False},
+        ).add_coordinates()
+
+        # Labels
+        # Custom Text Labels (Linear)
+        x_lab_lin = Text("Dataset Size", font_size=24).next_to(
+            ax_lin.x_axis, DOWN, buff=0.2
+        )
+        y_lab_lin = (
+            Text("Execution Time (s)", font_size=24)
+            .rotate(90 * DEGREES)
+            .next_to(ax_lin.y_axis, LEFT, buff=0.2)
+        )
+        labels_lin = VGroup(x_lab_lin, y_lab_lin)
+
+        # Custom Text Labels (Log)
+        x_lab_log = Text("Size (Log Scale)", font_size=24).next_to(
+            ax_log.x_axis, DOWN, buff=0.2
+        )
+        y_lab_log = (
+            Text("Time (Log Scale)", font_size=24)
+            .rotate(90 * DEGREES)
+            .next_to(ax_log.y_axis, LEFT, buff=0.2)
+        )
+        labels_log = VGroup(x_lab_log, y_lab_log)
+        # labels_lin = ax_lin.get_axis_labels(x_label="Size", y_label="Time")
+        # labels_log = ax_log.get_axis_labels(x_label="log(Size)", y_label="log(Time)")
+
+        # 3. Storage for Objects
+        all_lin_dots = VGroup()
+        all_lin_curves = VGroup()
+        all_log_dots = VGroup()
+        all_log_curves = VGroup()
+        all_curve_labels = VGroup()
+
+        # Initial Draw
+        self.play(Write(ax_lin), Write(labels_lin))
+
+        # 4. Progressive Drawing (Linear Space)
+        for i, alg in enumerate(sorted_algs):
+            alg_data = df[df["algorithm"] == alg].sort_values("size")
+            color = colors[i]
+
+            # Linear Objects
+            dots = VGroup(
+                *[
+                    Dot(ax_lin.c2p(r["size"], r["time"]), color=color, radius=0.06)
+                    for _, r in alg_data.iterrows()
+                ]
+            )
+            coeffs = np.polyfit(alg_data["size"], alg_data["time"], 2)
+            poly = np.poly1d(coeffs)
+            curve = ax_lin.plot(
+                lambda x: poly(x), x_range=[100, 1_000_000], color=color
+            )
+
+            # Log Objects (The "Targets" for the morph)
+            log_dots = VGroup(
+                *[
+                    Dot(ax_log.c2p(r["size"], r["time"]), color=color, radius=0.06)
+                    for _, r in alg_data.iterrows()
+                ]
+            )
+            # In Log-Log space, the fit is a straight line.
+            # We plot it using 2 points for maximum stability during Transform
+            log_x = np.log10(
+                alg_data["size"][alg_data["size"] > 10_000]
+            )  # Avoid log(0)
+            log_y = np.log10(alg_data["time"][alg_data["size"] > 10_000])
+            m, b = np.polyfit(log_x, log_y, 1)
+
+            # Using plot_line_graph is much more stable than ax_log.plot for transforms
+            log_curve = ax_log.plot_line_graph(
+                x_values=[10_000, 1_000_000],
+                y_values=[
+                    10 ** (m * np.log10(10_000) + b),
+                    10 ** (m * np.log10(1_000_000) + b),
+                ],
+                add_vertex_dots=False,
+                line_color=color,
+            )
+
+            label = Text(
+                algorithms[i], color=color, stroke_color=color, font_size=16
+            ).next_to(curve.get_end(), RIGHT, buff=0.25)
+
+            # Animate Linear Appearance
+            self.play(LaggedStartMap(FadeIn, dots, shift=UP * 0.2, lag_ratio=0.1))
+            self.play(Create(curve), Write(label), run_time=1.5)
+
+            all_lin_dots.add(dots)
+            all_lin_curves.add(curve)
+            all_curve_labels.add(label)
+            all_log_dots.add(log_dots)
+            all_log_curves.add(log_curve)
+
+        self.marked_next_slide()
+
+        # 5. THE BIG TRANSITION
+        self.play(
+            ReplacementTransform(ax_lin, ax_log),
+            ReplacementTransform(labels_lin, labels_log),
+            ReplacementTransform(all_lin_dots, all_log_dots),
+            ReplacementTransform(all_lin_curves, all_log_curves),
+            *[
+                label.animate.next_to(curve["line_graph"].get_end(), RIGHT, buff=0.25)
+                for label, curve in zip(all_curve_labels, all_log_curves)
+            ],
+            run_time=3,
+            # rate_func=slow_into_fast,
+        )
+
+        self.save_state("scaling_performance")
 
 
 # class PLSCANClusterSelection(TIMCSlide):

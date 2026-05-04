@@ -68,7 +68,7 @@ SIMULATION_FILES = [
 
 # ── benchmarks (benchmarks.py) ──────────────────────────────────────────────
 
-BENCHMARK_DATASETS = ["cifar", "news", "bird"]
+BENCHMARK_DATASETS = ["cifar", "news", "bird", "mnist"]
 BENCHMARK_METRICS = ["ari", "cs", "time"]
 BENCHMARK_ALGORITHMS = ["kmeans", "umap_hdbscan", "EVoC"]
 
