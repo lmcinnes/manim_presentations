@@ -6,6 +6,12 @@ requires-python = ">=3.10"
 dependencies = [
     "manim>=0.19.1",
     "manim-slides>=4.1.0",
+    "pot>=0.9.6.post1",
 ]
 
 [tool.uv]
+
+[tool.uv.workspace]
+members = [
+    "hdtda",
+]
