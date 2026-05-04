@@ -86,7 +86,8 @@ uv run manim-slides present \
   TitleAndMotivation EVoCLogoReveal PipelineOverview \
   TransitionToManifold ManifoldLearning TransitionToDensity \
   DensityEstimation TransitionToClusters ClusterExtraction \
-  PersistenceScoring EVoCBenefits Benchmarks Summary
+  PersistenceScoring EVoCBenefits Benchmarks\
+  ScalingPerformance Summary
 ```
 
 Navigate with arrow keys; press `q` to quit.
@@ -98,7 +99,8 @@ uv run manim-slides convert --to html \
   TitleAndMotivation EVoCLogoReveal PipelineOverview \
   TransitionToManifold ManifoldLearning TransitionToDensity \
   DensityEstimation TransitionToClusters ClusterExtraction \
-  PersistenceScoring EVoCBenefits Benchmarks Summary \
+  PersistenceScoring EVoCBenefits Benchmarks \
+  ScalingPerformance Summary \
   evoc_tmls.html
 ```
 
@@ -109,7 +111,8 @@ uv run manim-slides convert --to pptx \
   TitleAndMotivation EVoCLogoReveal PipelineOverview \
   TransitionToManifold ManifoldLearning TransitionToDensity \
   DensityEstimation TransitionToClusters ClusterExtraction \
-  PersistenceScoring EVoCBenefits Benchmarks Summary \
+  PersistenceScoring EVoCBenefits Benchmarks \
+  ScalingPerformance Summary \
   evoc_tmls.pptx
 ```
 

@@ -9,6 +9,8 @@ import hdbscan
 import pandas as pd
 import sklearn.cluster
 import sklearn.metrics
+
+from sklearn.datasets import make_blobs
 from datasets import load_dataset
 
 from data_manifest import (
@@ -60,6 +62,16 @@ DATASET_CONFIGS = {
             "cluster_selection_method": "leaf",
         },
     },
+    "mnist": {
+        "n_runs": 16,
+        "kmeans_kwargs": {"n_clusters": 10},
+        "umap_hdbscan_kwargs": {
+            "min_samples": 5,
+            "min_cluster_size": 1200,
+            "metric": "cosine",
+            "cluster_selection_method": "leaf",
+        },
+    },
 }
 
 MEASURES = [
@@ -104,10 +116,12 @@ def umap_hdbscan(
     return clustering
 
 
-def kmeans(data, n_clusters=10):
-    return sklearn.cluster.KMeans(n_clusters=n_clusters, n_init="auto").fit_predict(
-        data
-    )
+def kmeans(
+    data, n_clusters=10, kmeans_algorithm="lloyd", n_init="auto", init="k-means++"
+):
+    return sklearn.cluster.KMeans(
+        n_clusters=n_clusters, n_init=n_init, algorithm=kmeans_algorithm, init=init
+    ).fit_predict(data)
 
 
 def EVoC(data, test_target=None, random_state=None):
@@ -126,6 +140,12 @@ def EVoC(data, test_target=None, random_state=None):
             best_ari = ari
             result = labels
     return result
+
+
+def minibatch_kmeans(data, n_clusters=10):
+    return sklearn.cluster.MiniBatchKMeans(
+        n_clusters=n_clusters, n_init="auto", batch_size=4 * n_clusters
+    ).fit_predict(data)
 
 
 # =============================================================================
@@ -246,10 +266,15 @@ def _load_datasets():
     birdclef2023_data = birdclef2023_data[mask]
     birdclef2023_target = birdclef2023_target[mask]
 
+    mnist_all = sklearn.datasets.fetch_openml("mnist_784", version=1, as_frame=False)
+    mnist_data = np.ascontiguousarray(mnist_all["data"], dtype=np.float32)
+    mnist_target = np.asarray(mnist_all["target"]).astype(int)
+
     return {
         "cifar": (cifar_data, cifar_target),
         "news": (news_data, news_target),
         "bird": (birdclef2023_data, birdclef2023_target),
+        "mnist": (mnist_data, mnist_target),
     }
 
 
@@ -289,10 +314,69 @@ def ensure_data():
     regenerate_data()
 
 
+def scaling_benchmark():
+    algorithms = [
+        ("UMAP + HDBSCAN", lambda X: umap_hdbscan(X)),
+        (
+            "Sklearn KMeans",
+            lambda X: kmeans(
+                X,
+                n_clusters=n_clusters,
+                kmeans_algorithm="elkan",
+                n_init=4,
+                init="random",
+            ),
+        ),
+        (
+            "Sklearn Minibatch KMeans",
+            lambda X: minibatch_kmeans(X, n_clusters=n_clusters),
+        ),
+        ("EVoC", lambda X: EVoC(X)),
+    ]
+
+    scaling_results = {"size": [], "time": [], "algorithm": [], "ari": []}
+    n_runs = 3
+
+    # Force JIT compile for EVoC and UMAP+HDBSCAN before timing
+    blobs, labels = make_blobs(
+        n_samples=1000, n_features=1024, centers=10, cluster_std=3.0
+    )
+    EVoC(blobs)
+    umap_hdbscan(blobs, **DATASET_CONFIGS["mnist"]["umap_hdbscan_kwargs"])
+
+    for size in np.logspace(4, 6.0, num=12):
+        print(f"Running scaling benchmark for size {size:.0f} ...")
+        for n in range(n_runs):
+            n_clusters = int(2 * np.sqrt(size))
+            blobs, labels = make_blobs(
+                n_samples=int(size),
+                n_features=1024,
+                centers=n_clusters,
+                cluster_std=3.0,
+            )
+            blobs = np.ascontiguousarray(blobs, dtype=np.float32)
+
+            for name, fn in algorithms:
+                start_time = time.time()
+                clusters = fn(blobs)
+                scaling_results["size"].append(size)
+                scaling_results["algorithm"].append(name)
+                scaling_results["time"].append(time.time() - start_time)
+                scaling_results["ari"].append(
+                    sklearn.metrics.adjusted_rand_score(labels, clusters)
+                )
+
+    scaling_df = pd.DataFrame(scaling_results)
+    scaling_df.to_csv(DATA_DIR / "scaling_benchmark_results.csv", index=False)
+
+
 if __name__ == "__main__":
     import sys
 
     if "--only-missing" in sys.argv:
         ensure_data()
+        if not (DATA_DIR / "scaling_benchmark_results.csv").exists():
+            scaling_benchmark()
     else:
         regenerate_data()
+        scaling_benchmark()
