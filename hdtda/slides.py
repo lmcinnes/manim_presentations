@@ -262,6 +262,170 @@ def _pd_optimal_step(max_val: float) -> float:
     return 10.0
 
 
+class PersistanceDiagramExpectations(TIMCSlide):
+    def construct(self):
+        # 1. Setup Data
+        generator = CircleEmbedding(n_samples=300, seed=42)
+
+        noise_hd = 0.16
+        generator_kwds = {"radius": 1.0, "noise_2d": 0.0, "embedding": "linear"}
+
+        dimension = 4
+        X_2d, X_embedded, _, metadata = generator.generate_dataset(
+            target_dim=dimension,
+            noise_hd=noise_hd,
+            **generator_kwds,
+        )
+        dataset = X_embedded
+        diagram = ripser(X_embedded, maxdim=1)["dgms"]
+
+        finite_points = np.concatenate(
+            [d[np.isfinite(d).all(axis=1)] for d in diagram if len(d) > 0]
+        )
+        frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+
+        # --- CREATE NEW FRAME COMPONENTS ---
+        # Fixed tick steps (e.g., steps of 0.5 or 1.0 depending on scale)
+        tick_step = self.get_optimal_step(frame_max)
+
+        new_axes = Axes(
+            x_range=[0, frame_max, tick_step],
+            y_range=[0, frame_max, tick_step],
+            x_length=6,
+            y_length=6,
+            axis_config={
+                "include_tip": False,
+                "include_ticks": True,
+                "numbers_to_exclude": [0],
+            },
+        ).add_coordinates()
+
+        new_diag = Line(
+            start=new_axes.c2p(0, 0),
+            end=new_axes.c2p(frame_max, frame_max),
+            color=GRAY,
+            stroke_width=2,
+        )
+
+        # Infinity Line at the very top of the Y-axis
+        inf_y = new_axes.c2p(0, frame_max)[1]
+        new_inf_line = DashedLine(
+            start=[new_axes.c2p(0, 0)[0], inf_y, 0],
+            end=[new_axes.c2p(frame_max, 0)[0], inf_y, 0],
+            color=GRAY_C,
+        )
+
+        # Generate dot groups for H0, H1, H2
+        new_h_groups = self.get_homology_groups(diagram, new_axes, frame_max)
+        self.play(
+            Create(new_axes), Create(new_diag), Create(new_inf_line), run_time=1.0
+        )
+        for group in new_h_groups:
+            if len(group) > 0:
+                self.play(
+                    LaggedStart(
+                        *[FadeIn(dot, scale=1.5) for dot in group], lag_ratio=0.05
+                    ),
+                    run_time=0.5,
+                )
+            # self.play(Create(group))
+
+        self.marked_next_slide()
+
+        noise_arrow = Arrow(
+            start=new_axes.c2p(0.5, 0.6),
+            end=new_axes.c2p(1.0, 1.1),
+            color=DEFAULT_COLOR,
+            stroke_width=8,
+        )
+        self.play(GrowArrow(noise_arrow))
+
+        signal_arrow = Arrow(
+            start=new_axes.c2p(0.35, 1.16),
+            end=new_axes.c2p(1.0, 1.16),
+            color=ACCENT_COLOR,
+            stroke_width=8,
+        )
+        self.play(GrowArrow(signal_arrow))
+
+        self.marked_next_slide()
+
+        noise_moves = []
+        signal_moves = []
+        for dot in new_h_groups[1]:
+            if dot.get_center()[1] < new_axes.c2p(0.5, 0.5)[1] + 0.5:
+                target = (
+                    dot.get_center() + new_axes.c2p(0.66, 0.66) - new_axes.c2p(0, 0)
+                )
+                noise_moves.append(dot.animate.move_to(target))
+            else:
+                target = dot.get_center() + new_axes.c2p(0.66, 0.0) - new_axes.c2p(0, 0)
+                signal_moves.append(dot.animate.move_to(target))
+
+        self.play(
+            FadeOut(noise_arrow),
+            *noise_moves,
+        )
+
+        self.marked_next_slide()
+
+        self.play(
+            FadeOut(signal_arrow),
+            *signal_moves,
+        )
+
+    def get_homology_groups(self, dgms, axes, frame_max):
+        """Returns a list of VGroups, one for each homology dimension."""
+        groups = []
+        colors = [BLUE, ORANGE, GREEN]  # H0, H1, H2
+
+        for dim, dgm in enumerate(dgms):
+            vg = VGroup()
+            if len(dgm) == 0:
+                groups.append(vg)
+                continue
+
+            for point in dgm:
+                birth, death = point
+                # Handle Infinity Point (H0)
+                if not np.isfinite(death):
+                    dot = (
+                        Triangle(color=colors[dim])
+                        .scale(0.05)
+                        .move_to(axes.c2p(birth, frame_max))
+                    )
+                else:
+                    dot = Dot(
+                        point=axes.c2p(birth, death),
+                        color=colors[dim],
+                        radius=0.04,
+                        fill_opacity=0.7,
+                        stroke_width=0.5,
+                        stroke_color=WHITE,
+                        stroke_opacity=0.8,
+                    )
+                vg.add(dot)
+            groups.append(vg)
+
+        # Ensure we always return 3 groups even if H2 is empty
+        while len(groups) < 3:
+            groups.append(VGroup())
+
+        return groups
+
+    def get_optimal_step(self, max_val):
+        """Logic to keep ticks at 'round' intervals."""
+        if max_val < 10:
+            return 1.0
+        if max_val < 20:
+            return 2.0
+        if max_val < 50:
+            return 5.0
+        if max_val < 100:
+            return 10.0
+        return 20.0
+
+
 class DynamicPersistenceAnimation(TIMCSlide):
     def construct(self):
         # 1. Setup Data
@@ -735,6 +899,144 @@ def _make_vr_demo_cloud(
     return np.array(points)
 
 
+class VietorisRipsExplanation(TIMCSlide):
+    def construct(self):
+        from scipy.spatial.distance import pdist, squareform
+
+        # Build the point cloud and compute its distance matrix and persistence diagrams
+        pts = _make_vr_demo_cloud()
+        n_pts = len(pts)
+        dist_mat = squareform(pdist(pts))
+        max_r = np.max(dist_mat) * 1.1
+
+        # ── 2.  VR Complex panel  (left, centred at x = -3.7) ─────────────────
+        PANEL_CX = 0.0
+        PANEL_CY = 0.0
+        pts_c = pts - pts.mean(axis=0)
+        vis_scale = 3.5 / (np.max(np.abs(pts_c)) + 1e-9)
+        pts_vis = pts_c * vis_scale  # scene 2-D coords
+
+        pts_manim = [np.array([PANEL_CX + p[0], PANEL_CY + p[1], 0.0]) for p in pts_vis]
+
+        pt_dots = VGroup(
+            *[Dot(point=p, color=DEFAULT_COLOR, radius=0.07) for p in pts_manim]
+        )
+
+        self.play(
+            LaggedStart(*[FadeIn(dot, scale=2.0) for dot in pt_dots], lag_ratio=0.05)
+        )
+
+        self.marked_next_slide()
+
+        circles = []
+        for i in range(n_pts):
+            circ = Circle(
+                radius=0.001,  # start near-zero so set_radius has a valid base
+                arc_center=pts_manim[i],
+                color=GRAY,
+                stroke_width=1.5,
+                fill_opacity=0,
+            ).set_stroke(
+                opacity=0
+            )  # invisible until animation begins
+            circles.append(circ)
+
+        edge_data = []  # [(r_threshold, Line)]
+        for i in range(n_pts):
+            for j in range(i + 1, n_pts):
+                r_ij = dist_mat[i, j]
+                if r_ij <= max_r:
+                    line = Line(
+                        pts_manim[i],
+                        pts_manim[j],
+                        color=GRAY,
+                        stroke_width=1.5,
+                    ).set_stroke(opacity=0)
+                    edge_data.append((r_ij, line))
+        edge_data.sort(key=lambda x: x[0])
+
+        # Triangles — sorted by max-edge distance
+        tri_data = []  # [(r_threshold, Polygon)]
+        for i in range(n_pts):
+            for j in range(i + 1, n_pts):
+                for k in range(j + 1, n_pts):
+                    r_tri = max(dist_mat[i, j], dist_mat[j, k], dist_mat[i, k])
+                    if r_tri <= max_r:
+                        poly = Polygon(
+                            pts_manim[i],
+                            pts_manim[j],
+                            pts_manim[k],
+                            fill_color=ACCENT_COLOR,
+                            fill_opacity=0,
+                            stroke_width=0,
+                        )
+                        tri_data.append((r_tri, poly))
+        tri_data.sort(key=lambda x: x[0])
+        all_edges = VGroup(*[e for _, e in edge_data])
+        all_tris = VGroup(*[t for _, t in tri_data])
+        all_circles = VGroup(*circles)
+        self.add(all_tris, all_edges, all_circles)
+
+        r_tracker = ValueTracker(0.0)
+        self.add(r_tracker)
+
+        edge_ptr = [0]
+        tri_ptr = [0]
+
+        def _reveal_edges(_mob):
+            r = r_tracker.get_value()
+            while edge_ptr[0] < len(edge_data) and edge_data[edge_ptr[0]][0] <= r:
+                edge_data[edge_ptr[0]][1].set_stroke(opacity=0.5)
+                edge_ptr[0] += 1
+
+        def _reveal_tris(_mob):
+            r = r_tracker.get_value()
+            while tri_ptr[0] < len(tri_data) and tri_data[tri_ptr[0]][0] <= r:
+                tri_data[tri_ptr[0]][1].set_fill(opacity=0.1)
+                tri_ptr[0] += 1
+
+        def _update_circles(_mob):
+            # Rebuild each circle in-place via become() so the centre is always
+            # exactly pts_manim[i] and no set_radius drift can occur.
+            r = r_tracker.get_value()
+            ball_r_screen = r * vis_scale / 2
+            opacity = 0.5 if r > 1e-9 else 0.0
+            for i, circ in enumerate(circles):
+                circ.become(
+                    Circle(
+                        radius=max(0.001, ball_r_screen),
+                        arc_center=pts_manim[i],
+                        color=GRAY,
+                        stroke_width=1.5,
+                        fill_opacity=0,
+                    ).set_stroke(opacity=opacity)
+                )
+
+        # Attach updaters to scene mobjects (all_edges / all_tris / all_circles),
+        # NOT to r_tracker.  Manim suspends r_tracker's own updaters while it is
+        # the animated object (suspend_mobject_updating=True by default), so any
+        # updater on r_tracker only fires once at the very end of the clip.
+        all_edges.add_updater(_reveal_edges)
+        all_tris.add_updater(_reveal_tris)
+        all_circles.add_updater(_update_circles)
+
+        self.play(
+            r_tracker.animate.set_value(max_r / 6),
+            run_time=4.0,
+            rate_func=rate_functions.ease_in_out_quad,
+        )
+
+        self.marked_next_slide()
+
+        self.play(
+            r_tracker.animate.set_value(max_r / 3),
+            run_time=6.0,
+            rate_func=rate_functions.ease_in_quad,
+        )
+
+        self.wait()
+
+
 class PersistenceExplanation(TIMCSlide):
     """
     Animated introduction to persistence diagrams via the Vietoris-Rips filtration.
@@ -964,8 +1266,10 @@ class PersistenceExplanation(TIMCSlide):
                 tri_data[tri_ptr[0]][1].set_fill(opacity=0.1)
                 tri_ptr[0] += 1
 
-        r_tracker.add_updater(_reveal_edges)
-        r_tracker.add_updater(_reveal_tris)
+        # Same reasoning as VietorisRipsExplanation: attach to scene mobjects,
+        # not to r_tracker, so updaters fire every frame during self.play().
+        all_edges.add_updater(_reveal_edges)
+        all_tris.add_updater(_reveal_tris)
 
         # Per-dot updaters for H₁ (position + visibility)
         for birth_r, death_r, dot in h1_dots:
