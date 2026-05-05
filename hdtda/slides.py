@@ -996,15 +996,19 @@ class VietorisRipsExplanation(TIMCSlide):
                 tri_ptr[0] += 1
 
         def _update_circles(_mob):
-            # Rebuild each circle in-place via become() so the centre is always
-            # exactly pts_manim[i] and no set_radius drift can occur.
             r = r_tracker.get_value()
-            ball_r_screen = r * vis_scale / 2
+            target_r = max(0.001, r * vis_scale / 2)
             opacity = 0.5 if r > 1e-9 else 0.0
             for i, circ in enumerate(circles):
+                # set_radius scales about the bounding-box centre (correct for
+                # a centred circle); move_to then re-pins the centre to the data
+                # point, eliminating any accumulated floating-point drift.
+                # circ.set_radius(target_r)
+                # circ.move_to(pts_manim[i])
+                # circ.set_stroke(opacity=opacity)
                 circ.become(
                     Circle(
-                        radius=max(0.001, ball_r_screen),
+                        radius=max(0.001, target_r),
                         arc_center=pts_manim[i],
                         color=GRAY,
                         stroke_width=1.5,
@@ -1012,10 +1016,6 @@ class VietorisRipsExplanation(TIMCSlide):
                     ).set_stroke(opacity=opacity)
                 )
 
-        # Attach updaters to scene mobjects (all_edges / all_tris / all_circles),
-        # NOT to r_tracker.  Manim suspends r_tracker's own updaters while it is
-        # the animated object (suspend_mobject_updating=True by default), so any
-        # updater on r_tracker only fires once at the very end of the clip.
         all_edges.add_updater(_reveal_edges)
         all_tris.add_updater(_reveal_tris)
         all_circles.add_updater(_update_circles)
@@ -1023,7 +1023,7 @@ class VietorisRipsExplanation(TIMCSlide):
         self.play(
             r_tracker.animate.set_value(max_r / 6),
             run_time=4.0,
-            rate_func=rate_functions.ease_in_out_quad,
+            rate_func=rate_functions.ease_out_quart,
         )
 
         self.marked_next_slide()
@@ -1034,7 +1034,13 @@ class VietorisRipsExplanation(TIMCSlide):
             rate_func=rate_functions.ease_in_quad,
         )
 
-        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(all_circles), run_time=1.0)
+
+        self.marked_next_slide()
+
+        self.clear_slide(run_time=1.0)
 
 
 class PersistenceExplanation(TIMCSlide):
