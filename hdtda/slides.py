@@ -682,7 +682,7 @@ class ExampleCircleEmbeddingConstruction(ThreeDTIMCSlide):
         twod_points.remove_updater(update_dots_transport)
 
         self.begin_ambient_camera_rotation(rate=0.75)
-        self.wait(8)  # update to be longer as required
+        self.wait(12)  # update to be longer as required
         self.stop_ambient_camera_rotation()
 
     def create_points(self, data, axes):
@@ -695,42 +695,248 @@ class ExampleCircleEmbeddingConstruction(ThreeDTIMCSlide):
         return points
 
 
-class LissajousKnot(ThreeDTIMCSlide):
+# ---------------------------------------------------------------------------
+# Helpers shared by the Lissajous knot base classes
+# ---------------------------------------------------------------------------
+import itertools as _it
+import types as _types
+
+
+def _make_circular_nudges(thickness):
+    """Pixel-nudge offsets forming a filled disc (round PMobject points)."""
+    thickness = int(thickness)
+    _range = range(-thickness // 2 + 1, thickness // 2 + 1)
+    r2 = (thickness / 2.0) ** 2
+    nudges = [
+        (dy, dx) for dy, dx in _it.product(_range, _range) if dx * dx + dy * dy <= r2
+    ]
+    return np.array(nudges) if nudges else np.array([[0, 0]])
+
+
+def _normalize_to_axes(X):
+    """Centre and scale so the cloud fits comfortably inside [-2.5, 2.5]^3."""
+    X = X - X.mean(axis=0)
+    X = X / (np.abs(X).max() * 0.5)
+    return X
+
+
+# ---------------------------------------------------------------------------
+# Cairo base class
+# ---------------------------------------------------------------------------
+
+
+class _LissajousBase(ThreeDTIMCSlide):
+    """
+    Cairo-renderer base for Lissajous-knot embedding scenes.
+
+    Subclasses set class-level attributes to vary the dataset and reduction,
+    and may override ``get_embedding`` for custom dimensionality reduction.
+    """
+
+    _n_samples: int = 2000
+    _seed: int = 42
+    _generator_kwargs: dict = dict(
+        target_dim=4,
+        radius=2.0,
+        n_planes=2,
+        noise=0.0,
+        noise_hd=0.05,
+        dataset_type="highdim_loop",
+    )
+    _rotation_wait: float = 12.0
+    _stroke_width: int = 16
+
+    def get_embedding(self, X_embedded: np.ndarray) -> np.ndarray:
+        """Return an (N, 3) array to plot. Override to change reduction."""
+        return sklearn.decomposition.PCA(n_components=3).fit_transform(X_embedded)
 
     def construct(self):
-        generator = CurvyLoopEmbedding(n_samples=200, seed=42)
-        X_low, X_embedded, metadata = generator.generate_dataset(
-            target_dim=4,
-            radius=2.0,
-            n_planes=2,
-            noise=0.0,
-            noise_hd=0.075,
-            dataset_type="highdim_loop",
-        )
-        pca_embedded = sklearn.decomposition.PCA(n_components=3).fit_transform(
-            X_embedded
-        )
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+        embedding_3d = self.get_embedding(X_embedded)
+
         axes = ThreeDAxes(x_range=[-2.5, 2.5], y_range=[-2.5, 2.5], z_range=[-2.5, 2.5])
-        points = self.create_points(pca_embedded, axes)
+        points = self.create_points(embedding_3d, axes)
+
+        self.camera.get_thickening_nudges = _types.MethodType(
+            lambda cam, t: _make_circular_nudges(t), self.camera
+        )
 
         self.move_camera(phi=75 * DEGREES, theta=30 * DEGREES)
-
         self.play(Create(axes))
         self.wait(1)
-        self.play(Create(points))
+        self.play(FadeIn(points))
         self.begin_ambient_camera_rotation(rate=0.75)
-        self.wait(8)
+        self.wait(self._rotation_wait)
         self.stop_ambient_camera_rotation()
 
-    def create_points(self, data, axes):
-        points = VGroup()
-        for x, t in zip(data, np.linspace(0, 1, len(data))):
-            if len(x) == 2:
-                x = np.append(x, 0)  # Add z=0 for 2D points
-            color = colorcet.CET_C9[int(t * (len(colorcet.CET_C9) - 1))]
-            dot = Dot3D(point=axes.c2p(*x), color=color, radius=0.05)
-            points.add(dot)
-        return points
+        self.marked_next_slide()
+        self.begin_ambient_camera_rotation(rate=4 * PI / self._rotation_wait)
+        self.wait(self._rotation_wait / 2)
+        self.stop_ambient_camera_rotation()
+        self.marked_next_slide()
+
+        self.clear_slide()
+
+    def create_points(self, data: np.ndarray, axes) -> PMobject:
+        from manim.utils.color import color_to_rgba
+
+        coords = np.array(
+            [axes.c2p(*(x if len(x) == 3 else np.append(x, 0))) for x in data],
+            dtype=np.float64,
+        )
+        ts = np.linspace(0, 1, len(data))
+        rgbas = np.array(
+            [
+                color_to_rgba(colorcet.CET_C9[int(t * (len(colorcet.CET_C9) - 1))])
+                for t in ts
+            ]
+        )
+        pm = PMobject(stroke_width=self._stroke_width)
+        pm.add_points(coords, rgbas=rgbas)
+        return pm
+
+
+# ---------------------------------------------------------------------------
+# OpenGL base class  (use with --renderer=opengl)
+# ---------------------------------------------------------------------------
+
+
+class _LissajousBaseOpenGL(ThreeDTIMCSlide):
+    """
+    OpenGL-renderer base for Lissajous-knot embedding scenes.
+    Render with:  manim-slides render slides.py <ClassName> --renderer=opengl
+    """
+
+    _n_samples: int = 2000
+    _seed: int = 42
+    _generator_kwargs: dict = dict(
+        target_dim=4,
+        radius=2.0,
+        n_planes=2,
+        noise=0.0,
+        noise_hd=0.05,
+        dataset_type="highdim_loop",
+    )
+    _rotation_wait: float = 8.0
+    _n_color_groups: int = 64
+    _dot_stroke_width: float = 4.0
+
+    def get_embedding(self, X_embedded: np.ndarray) -> np.ndarray:
+        """Return an (N, 3) array to plot. Override to change reduction."""
+        return sklearn.decomposition.PCA(n_components=3).fit_transform(X_embedded)
+
+    def construct(self):
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+        embedding_3d = self.get_embedding(X_embedded)
+
+        axes = ThreeDAxes(x_range=[-2.5, 2.5], y_range=[-2.5, 2.5], z_range=[-2.5, 2.5])
+        points = self.create_points(embedding_3d, axes)
+
+        self.move_camera(phi=75 * DEGREES, theta=30 * DEGREES)
+        self.play(Create(axes))
+        self.wait(1)
+        self.play(FadeIn(points))
+        self.begin_ambient_camera_rotation(rate=0.75)
+        self.wait(self._rotation_wait)
+        self.stop_ambient_camera_rotation()
+
+    def create_points(self, data: np.ndarray, axes):
+        coords = np.array(
+            [axes.c2p(*(x if len(x) == 3 else np.append(x, 0))) for x in data],
+            dtype=np.float32,
+        )
+        n = len(data)
+        group_indices = np.array_split(np.arange(n), self._n_color_groups)
+        result = Group()
+        for i, indices in enumerate(group_indices):
+            t_mid = i / max(self._n_color_groups - 1, 1)
+            color = colorcet.CET_C9[int(t_mid * (len(colorcet.CET_C9) - 1))]
+            dc = DotCloud(color=color, stroke_width=self._dot_stroke_width)
+            dc.set_points(coords[indices])
+            result.add(dc)
+        return result
+
+
+# ---------------------------------------------------------------------------
+# Shared generator kwargs for the high-dimensional variants
+# ---------------------------------------------------------------------------
+
+_HIGH_D_KWARGS = dict(
+    target_dim=512,
+    radius=2.0,
+    n_planes=5,
+    noise=0.01,
+    noise_hd=0.175,
+    dataset_type="highdim_loop",
+)
+
+# ---------------------------------------------------------------------------
+# Concrete scenes
+# ---------------------------------------------------------------------------
+
+
+class LissajousKnot(_LissajousBase):
+    """Low-dimensional Lissajous knot, PCA to 3D (Cairo renderer)."""
+
+    pass
+
+
+class LissajousKnotOpenGL(_LissajousBaseOpenGL):
+    """Low-dimensional Lissajous knot, PCA to 3D (OpenGL renderer)."""
+
+    pass
+
+
+class HighDLissajousPCA(_LissajousBase):
+    """High-dimensional Lissajous knot projected with PCA (Cairo renderer)."""
+
+    _generator_kwargs = _HIGH_D_KWARGS
+
+
+class HighDLissajousPCAOpenGL(_LissajousBaseOpenGL):
+    """High-dimensional Lissajous knot projected with PCA (OpenGL renderer)."""
+
+    _generator_kwargs = _HIGH_D_KWARGS
+
+
+class HighDLissajousUMAP(_LissajousBase):
+    """High-dimensional Lissajous knot projected with UMAP (Cairo renderer)."""
+
+    _generator_kwargs = _HIGH_D_KWARGS
+
+    def get_embedding(self, X_embedded):
+        import umap
+
+        result = umap.UMAP(n_components=3, random_state=42).fit_transform(X_embedded)
+        return _normalize_to_axes(result)
+
+
+class HighDLissajousEffRes(_LissajousBase):
+    """High-dimensional Lissajous knot, effective-resistance embedding (Cairo renderer)."""
+
+    _generator_kwargs = _HIGH_D_KWARGS
+
+    def get_embedding(self, X_embedded):
+        from data_generation import effective_resistance_distance_embedding
+
+        result = effective_resistance_distance_embedding(X_embedded)
+        return _normalize_to_axes(result)
+
+
+class HighDLissajousSpectral(_LissajousBase):
+    """High-dimensional Lissajous knot projected with spectral embedding (Cairo renderer)."""
+
+    _generator_kwargs = _HIGH_D_KWARGS
+
+    def get_embedding(self, X_embedded):
+        from sklearn.manifold import SpectralEmbedding
+
+        result = SpectralEmbedding(
+            n_components=3, n_neighbors=15, random_state=42
+        ).fit_transform(X_embedded)
+        return _normalize_to_axes(result)
 
 
 class ShadedNNDistribution(TIMCSlide):
@@ -1341,3 +1547,201 @@ class PersistenceExplanation(TIMCSlide):
         )
         self.wait(1.0)
         self.marked_next_slide()  # [Final slide] complete persistence diagram
+
+
+class ForceParameterization(TIMCSlide):
+    def construct(self):
+
+        axes = Axes(
+            x_range=[0.0, 2.5, 0.5],
+            y_range=[0.0, 1.25, 0.5],
+            x_length=8,
+            y_length=6,
+            axis_config={"include_tip": False},
+        ).add_coordinates()
+
+        self.play(Create(axes))
+
+        # f(x) = 1 / (1 + (max(0, x - shift) / scale)^p)^q
+        BASE_SCALE = 0.75
+        BASE_P = 2.0
+        BASE_Q = 1.5
+
+        def force(x, scale=BASE_SCALE, shift=0.0, p=BASE_P, q=BASE_Q):
+            v = max(0.0, x - shift) / scale
+            return 1.0 / (1.0 + v**p) ** q
+
+        PLOT_STEP = 0.005
+        graph = axes.plot(
+            lambda x: force(x),
+            x_range=[0.0, 2.5, PLOT_STEP],
+            color=ACCENT_COLOR,
+            stroke_width=9,
+        )
+        self.play(Create(graph))
+
+        self.marked_next_slide()
+
+        import matplotlib.cm as _cm
+
+        def _plasma(t):
+            """Sample the plasma colormap at t in [0, 1], return hex string."""
+            r, g, b, _ = _cm.plasma(float(t))
+            return "#{:02x}{:02x}{:02x}".format(
+                int(r * 255), int(g * 255), int(b * 255)
+            )
+
+        def make_ghost_fan(param, values, **fixed):
+            n = len(values)
+            g = VGroup()
+            for i, val in enumerate(values):
+                kw = dict(fixed, **{param: val})
+                color = _plasma(i / max(n - 1, 1))
+                gc = axes.plot(
+                    lambda x, kw=kw: force(x, **kw),
+                    x_range=[0.0, 2.5, PLOT_STEP],
+                    color=color,
+                    stroke_width=2.5,
+                )
+                gc.set_stroke(opacity=0.55)
+                g.add(gc)
+            return g
+
+        def smooth_sweep(waypoints, make_graph_fn, total_duration=3.0):
+            """
+            Continuously morphs the live curve through each waypoint value.
+            Uses a ValueTracker + always_redraw so transitions are frame-continuous
+            with no discrete steps or pauses between waypoints.
+            """
+            nonlocal graph
+            n_segs = len(waypoints) - 1
+            seg_dur = total_duration / n_segs
+            param_t = ValueTracker(waypoints[0])
+            live = always_redraw(lambda: make_graph_fn(param_t.get_value()))
+            self.remove(graph)
+            self.add(live)
+            for target in waypoints[1:]:
+                self.play(
+                    param_t.animate.set_value(target),
+                    run_time=seg_dur,
+                    rate_func=smooth,
+                )
+            # Swap live graph for a static one so later transforms work normally
+            final = make_graph_fn(waypoints[-1])
+            self.remove(live)
+            self.add(final)
+            graph = final
+
+        # ── Scale ─────────────────────────────────────────────────────────
+        SCALE_GHOSTS = [0.2, 0.35, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+        ghosts = make_ghost_fan(
+            "scale",
+            SCALE_GHOSTS,
+            shift=0.0,
+            p=BASE_P,
+            q=BASE_Q,
+        )
+        param_text = Text("Scale", font_size=22).move_to(axes.c2p(1.5, 0.9))
+        self.play(Write(param_text), FadeIn(ghosts))
+        smooth_sweep(
+            [BASE_SCALE, 2.0, 0.2, BASE_SCALE],
+            lambda sv: axes.plot(
+                lambda x, sv=sv: force(x, scale=sv),
+                x_range=[0.0, 2.5, PLOT_STEP],
+                color=ACCENT_COLOR,
+                stroke_width=9,
+            ),
+        )
+        self.play(FadeOut(ghosts), FadeOut(param_text))
+
+        self.marked_next_slide()
+
+        # ── Shoulder width ─────────────────────────────────────────────────
+        SHIFT_GHOSTS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+        ghosts = make_ghost_fan(
+            "shift",
+            SHIFT_GHOSTS,
+            scale=BASE_SCALE,
+            p=BASE_P,
+            q=BASE_Q,
+        )
+        param_text = Text("Shoulder width", font_size=22).move_to(axes.c2p(1.5, 0.9))
+        self.play(Write(param_text), FadeIn(ghosts))
+        # Shift only has a positive direction (base = 0); sweep out and back
+        smooth_sweep(
+            [0.0, 0.8, 0.0],
+            lambda sh: axes.plot(
+                lambda x, sh=sh: force(x, shift=sh),
+                x_range=[0.0, 2.5, PLOT_STEP],
+                color=ACCENT_COLOR,
+                stroke_width=9,
+            ),
+            total_duration=2.0,
+        )
+        self.play(FadeOut(ghosts), FadeOut(param_text))
+
+        self.marked_next_slide()
+
+        # ── Shoulder sharpness: vary p while keeping p·q = BASE_P·BASE_Q ─
+        # This holds the large-x tail exponent constant so only the knee
+        # shape changes, not the rate of decay in the tail.
+        TAIL_CONST = BASE_P * BASE_Q  # = 3.0
+        P_GHOSTS = [0.4, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0]
+
+        def _sharpness_ghost_fan():
+            n = len(P_GHOSTS)
+            g = VGroup()
+            for i, pv in enumerate(P_GHOSTS):
+                qv = TAIL_CONST / pv
+                color = _plasma(i / max(n - 1, 1))
+                gc = axes.plot(
+                    lambda x, pv=pv, qv=qv: force(x, p=pv, q=qv),
+                    x_range=[0.0, 2.5, PLOT_STEP],
+                    color=color,
+                    stroke_width=2.5,
+                )
+                gc.set_stroke(opacity=0.55)
+                g.add(gc)
+            return g
+
+        ghosts = _sharpness_ghost_fan()
+        param_text = Text("Shoulder sharpness", font_size=22).move_to(
+            axes.c2p(1.5, 0.9)
+        )
+        self.play(Write(param_text), FadeIn(ghosts))
+        smooth_sweep(
+            [BASE_P, 8.0, 0.4, BASE_P],
+            lambda pv: axes.plot(
+                lambda x, pv=pv, qv=TAIL_CONST / pv: force(x, p=pv, q=qv),
+                x_range=[0.0, 2.5, PLOT_STEP],
+                color=ACCENT_COLOR,
+                stroke_width=9,
+            ),
+        )
+        self.play(FadeOut(ghosts), FadeOut(param_text))
+
+        self.marked_next_slide()
+
+        # ── Tail decay (outer exponent q only; scale and p fixed) ─────────
+        # q < 1: heavy tails, force persists at large distances
+        # q >> 1: tight support, force drops to near-zero quickly
+        Q_GHOSTS = [0.4, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+        ghosts = make_ghost_fan(
+            "q",
+            Q_GHOSTS,
+            scale=BASE_SCALE,
+            shift=0.0,
+            p=BASE_P,
+        )
+        param_text = Text("Tail decay", font_size=22).move_to(axes.c2p(1.5, 0.9))
+        self.play(Write(param_text), FadeIn(ghosts))
+        smooth_sweep(
+            [BASE_Q, 5.0, 0.4, BASE_Q],
+            lambda qv: axes.plot(
+                lambda x, qv=qv: force(x, q=qv),
+                x_range=[0.0, 2.5, PLOT_STEP],
+                color=ACCENT_COLOR,
+                stroke_width=9,
+            ),
+        )
+        self.play(FadeOut(ghosts), FadeOut(param_text))

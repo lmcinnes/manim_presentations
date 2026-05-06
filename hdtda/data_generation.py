@@ -808,3 +808,91 @@ class CurvyLoopEmbedding:
         metadata["basis"] = basis
 
         return X_low, X_embedded, metadata
+
+
+def umap_embedding(X, target_dim=3, n_neighbors=15, min_dist=0.1, random_state=42):
+    """
+    Embed high-dimensional data into a lower-dimensional space using UMAP.
+
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples, n_features)
+        High-dimensional input data
+    target_dim : int
+        Target embedding dimension (e.g., 2 or 3)
+    n_neighbors : int
+        Number of neighbors for UMAP
+    min_dist : float
+        Minimum distance parameter for UMAP
+    random_state : int
+        Random seed for reproducibility
+
+    Returns
+    -------
+    X_embedded : ndarray of shape (n_samples, target_dim)
+        UMAP embedding of the input data
+    """
+    import umap
+
+    reducer = umap.UMAP(
+        n_components=target_dim,
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        random_state=random_state,
+    )
+    X_embedded = reducer.fit_transform(X)
+    return X_embedded
+
+
+def get_eff_res_spectral(adj, k=100):
+    """
+    Approximates EffR using the bottom k eigenvectors of the Laplacian.
+    Scales O(n * k).
+    """
+    import scipy.sparse as sp
+    from scipy.sparse.linalg import eigsh
+
+    n = adj.shape[0]
+    degs = np.array(adj.sum(axis=1)).flatten()
+    L = sp.diags(degs) - adj
+
+    # Get the smallest k+1 eigenvalues/vectors (first is always 0)
+    # We use 'SM' (Smallest Magnitude)
+    vals, vecs = eigsh(L, k=k + 1, which="SM")
+
+    # Drop the first trivial eigenvalue
+    vals = vals[1:]
+    vecs = vecs[:, 1:]
+
+    # L_pinv approximation = U * Lambda^-1 * U^T
+    # To get R_ij = L_ii + L_jj - 2*L_ij, we treat rows of (U * Lambda^-0.5)
+    # as coordinates in a Euclidean space.
+    embedding = vecs / np.sqrt(vals)
+
+    return embedding
+
+
+def effective_resistance_distance_embedding(X, target_dim=3):
+    """
+    Embed high-dimensional data into a lower-dimensional space using effective resistance distance.
+
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples, n_features)
+        High-dimensional input data
+    target_dim : int
+        Target embedding dimension (e.g., 2 or 3)
+
+    Returns
+    -------
+    X_embedded : ndarray of shape (n_samples, target_dim)
+        Embedding based on effective resistance distance
+    """
+    import umap
+
+    # Extract UMAPs graph and compute effective resistance distance
+    reducer = umap.UMAP(transform_mode="graph", random_state=42)
+    adj = reducer.fit_transform(X)
+    embedding = get_eff_res_spectral(adj, k=target_dim)
+
+    return embedding
