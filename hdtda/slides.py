@@ -1249,6 +1249,205 @@ class VietorisRipsExplanation(TIMCSlide):
         self.clear_slide(run_time=1.0)
 
 
+class SimplicialHomologyExplanation(TIMCSlide):
+    """
+    Animated H₁ recap (ℤ₂ coefficients) on a hand-crafted planar complex K.
+
+    Complex layout — 8 vertices in a 2×4 grid, middle column triangulated:
+
+        v0 ─── v1 ─── v2 ─── v3
+        │       │  ╲   │       │
+        v4 ─── v5 ─── v6 ─── v7
+
+    Edges: top/bottom rows, four verticals, plus diagonal v2–v5 (triangulation).
+    2-cells: τ₁ = (v1,v2,v5),  τ₂ = (v2,v5,v6)  — fill the middle rectangle.
+
+    Three 1-cycles highlighted in sequence:
+        σ₁  left  loop  v0–v1–v5–v4   —  non-trivial  [σ₁] ≠ 0
+        σ₂  right loop  v2–v3–v7–v6   —  non-trivial  [σ₂] ≠ 0, independent of σ₁
+        σ₃  mid   loop  v1–v2–v6–v5   —  null-homologous: σ₃ = ∂₂(τ₁ + τ₂)
+
+    Conclusion:  H₁(K; ℤ₂) ≅ ℤ₂ ⊕ ℤ₂
+    """
+
+    def construct(self):
+        # ── 1.  Vertex layout ─────────────────────────────────────────────────
+        # Three rectangular regions side-by-side; complex centred on screen.
+        DX, DY = 1.8, 1.9  # horizontal / vertical spacing
+        CX, CY = 0.0, 0.6  # centroid of the complex
+        v = [
+            np.array([CX - 1.5 * DX, CY + DY / 2, 0.0]),  # 0  top-left
+            np.array([CX - 0.5 * DX, CY + DY / 2, 0.0]),  # 1  top-mid-L
+            np.array([CX + 0.5 * DX, CY + DY / 2, 0.0]),  # 2  top-mid-R
+            np.array([CX + 1.5 * DX, CY + DY / 2, 0.0]),  # 3  top-right
+            np.array([CX - 1.5 * DX, CY - DY / 2, 0.0]),  # 4  bot-left
+            np.array([CX - 0.5 * DX, CY - DY / 2, 0.0]),  # 5  bot-mid-L
+            np.array([CX + 0.5 * DX, CY - DY / 2, 0.0]),  # 6  bot-mid-R
+            np.array([CX + 1.5 * DX, CY - DY / 2, 0.0]),  # 7  bot-right
+        ]
+        # x ∈ [−2.7, 2.7],  y ∈ [−0.35, 1.55]  — fits comfortably on screen.
+
+        # ── 2.  Base simplicial complex mobjects ──────────────────────────────
+        EDGE_PAIRS = [
+            (0, 1),
+            (1, 2),
+            (2, 3),  # top row
+            (4, 5),
+            (5, 6),
+            (6, 7),  # bottom row
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),  # verticals
+            (2, 5),  # triangulation diagonal
+        ]
+        base_edges = {
+            (i, j): Line(v[i], v[j], color=DEFAULT_COLOR, stroke_width=2.0)
+            for (i, j) in EDGE_PAIRS
+        }
+        base_dots = {i: Dot(v[i], color=DEFAULT_COLOR, radius=0.07) for i in range(8)}
+        # Middle region: τ₁ = (1,2,5),  τ₂ = (2,5,6)
+        tri1 = Polygon(
+            v[1],
+            v[2],
+            v[5],
+            fill_color=ACCENT_COLOR,
+            fill_opacity=0.15,
+            stroke_width=0,
+        )
+        tri2 = Polygon(
+            v[2],
+            v[5],
+            v[6],
+            fill_color=ACCENT_COLOR,
+            fill_opacity=0.15,
+            stroke_width=0,
+        )
+        all_tris = VGroup(tri1, tri2)
+        all_edges_grp = VGroup(*base_edges.values())
+        all_dots_grp = VGroup(*base_dots.values())
+
+        # ── 3.  Slide 1: reveal the complex ───────────────────────────────────
+        self.play(
+            FadeIn(all_tris),
+            LaggedStart(
+                *[FadeIn(e) for e in all_edges_grp.submobjects], lag_ratio=0.05
+            ),
+            LaggedStart(
+                *[GrowFromCenter(d) for d in all_dots_grp.submobjects], lag_ratio=0.05
+            ),
+            run_time=2.2,
+        )
+        self.marked_next_slide()
+
+        # ── 4.  Title ─────────────────────────────────────────────────────────
+        title = MathTex(
+            r"\text{Simplicial Homology:}\\ H_1(K;\,\mathbb{Z}_2)"
+            r" \;=\; \ker\partial_1 \;/\; \mathrm{im}\,\partial_2",
+            font_size=42,
+        ).to_edge(UP, buff=0.35)
+        self.play(Write(title), run_time=2.0)
+        self.marked_next_slide()
+
+        # ── 5.  Helpers ───────────────────────────────────────────────────────
+        def _cycle_overlay(pairs, color, width=5.5):
+            """Thick coloured lines drawn over the given edge pairs."""
+            return VGroup(
+                *[
+                    Line(v[i], v[j], color=color, stroke_width=width, z_index=2)
+                    for (i, j) in pairs
+                ]
+            )
+
+        # Interior centres of the three rectangular loops
+        ctr_left = np.array([CX - DX, CY, 0.0])  # centre of left loop
+        ctr_right = np.array([CX + DX, CY, 0.0])  # centre of right loop
+
+        # Annotation rows build upward from the bottom of the frame
+        ANNO_Y = -3.1  # y of the first annotation line
+        ANNO_DY = 0.72  # step between annotation rows
+
+        # ── 6.  Slide 2: σ₁ — left loop, non-trivial ─────────────────────────
+        C1 = COLOR_CYCLE[0]
+        hi1 = _cycle_overlay([(0, 1), (1, 5), (4, 5), (0, 4)], C1)
+        inner1 = MathTex(r"\sigma_1", font_size=26, color=C1).move_to(ctr_left)
+        anno1 = MathTex(
+            r"\sigma_1 \;\in\; \ker\partial_1,\quad [\sigma_1] \neq 0",
+            font_size=28,
+            color=C1,
+        ).move_to([0.0, ANNO_Y, 0.0])
+
+        self.play(FadeIn(hi1), FadeIn(inner1), run_time=0.7)
+        self.play(Write(anno1), run_time=1.1)
+        self.marked_next_slide()
+
+        # ── 7.  Slide 3: σ₂ — right loop, non-trivial ────────────────────────
+        C2 = COLOR_CYCLE[1]
+        hi2 = _cycle_overlay([(2, 3), (3, 7), (6, 7), (2, 6)], C2)
+        inner2 = MathTex(r"\sigma_2", font_size=26, color=C2).move_to(ctr_right)
+        anno2 = MathTex(
+            r"\sigma_2 \;\in\; \ker\partial_1,\quad [\sigma_2] \neq 0,"
+            r"\quad [\sigma_1] \neq [\sigma_2]",
+            font_size=28,
+            color=C2,
+        ).move_to([0.0, ANNO_Y + ANNO_DY, 0.0])
+
+        self.play(FadeIn(hi2), FadeIn(inner2), run_time=0.7)
+        self.play(Write(anno2), run_time=1.1)
+        self.marked_next_slide()
+
+        # ── 8.  Slide 4: σ₃ — middle loop, null-homologous ───────────────────
+        C3 = COLOR_CYCLE[2]
+        hi3 = _cycle_overlay([(1, 2), (2, 6), (5, 6), (1, 5)], C3)
+
+        # Brighten the two 2-cells to show σ₃ = ∂₂(τ₁ + τ₂)
+        tri1_hi = Polygon(
+            v[1], v[2], v[5], fill_color=C3, fill_opacity=0.42, stroke_width=0
+        )
+        tri2_hi = Polygon(
+            v[2], v[5], v[6], fill_color=C3, fill_opacity=0.42, stroke_width=0
+        )
+        tau1_lbl = MathTex(r"\tau_1", font_size=22, color=C3).move_to(
+            (v[1] + v[2] + v[5]) / 3
+        )
+        tau2_lbl = MathTex(r"\tau_2", font_size=22, color=C3).move_to(
+            (v[2] + v[5] + v[6]) / 3
+        )
+        anno3 = MathTex(
+            r"\sigma_3 \;=\; \partial_2(\tau_1 + \tau_2)"
+            r"\;\Rightarrow\; [\sigma_3] = 0",
+            font_size=28,
+            color=C3,
+        ).move_to([0.0, ANNO_Y + 2 * ANNO_DY, 0.0])
+
+        self.play(FadeIn(hi3), run_time=0.7)
+        self.play(
+            Transform(tri1, tri1_hi),
+            Transform(tri2, tri2_hi),
+            FadeIn(tau1_lbl),
+            FadeIn(tau2_lbl),
+            run_time=0.8,
+        )
+        self.play(Write(anno3), run_time=1.1)
+        self.marked_next_slide()
+
+        # ── 9.  Slide 5: conclusion ────────────────────────────────────────────
+        concl = MathTex(
+            r"H_1(K;\,\mathbb{Z}_2) \;\cong\; \mathbb{Z}_2 \oplus \mathbb{Z}_2",
+            font_size=44,
+        )
+        box = SurroundingRectangle(
+            concl, color=HIGHLIGHT_COLOR, buff=0.18, corner_radius=0.1
+        )
+        VGroup(concl, box).move_to([0.0, ANNO_Y + 3 * ANNO_DY, 0.0])
+
+        self.play(FadeOut(anno1), FadeOut(anno2), FadeOut(anno3), run_time=0.4)
+        self.play(Write(concl), Create(box), run_time=1.5)
+        self.marked_next_slide()
+
+        self.clear_slide(run_time=1.0)
+
+
 class PersistenceExplanation(TIMCSlide):
     """
     Animated introduction to persistence diagrams via the Vietoris-Rips filtration.
@@ -1549,6 +1748,599 @@ class PersistenceExplanation(TIMCSlide):
         self.marked_next_slide()  # [Final slide] complete persistence diagram
 
 
+class EffectiveResistanceCommute(TIMCSlide):
+    """
+    Demonstrates effective resistance through the commute-time intuition.
+
+    Key message: R_eff is governed by the *number* of paths between two nodes.
+    Two nodes connected by many medium-length paths can have lower resistance
+    than two nodes connected by a single short path if all other routes between
+    the latter are extremely long.
+
+    Slide flow
+    ----------
+    Phase 1 – Setup
+      1. Title
+      2. Reveal 3×4 grid; highlight s (row 1, left) and t (row 1, right)
+      3. Commute-time definition + counter widget appears
+
+    Phase 2 – Walks on full grid (many paths)
+      4. Slow walk 1: step-by-step dot + trail (0.45s/hop)
+      5. Faster walk 2: (0.2s/hop), rolling avg counter
+      6. Fast flash walks × 10: polyline traces, counter settles low
+         → caption "Many paths → low resistance"
+
+    Phase 3 – Prune to bottleneck (single bridge)
+      7. FadeOut most cross-edges; highlight one bridge; |E| updates
+      8. Slow walk 1 on bottleneck: long detour, counter jumps high
+      9. Fast flash walks × 8 on bottleneck: counter settles high
+         → side-by-side annotation comparing both averages
+
+    Phase 4 – Formulas
+     10. Clear, show L definition, R_eff = (e_i−e_j)^T L+ (e_i−e_j),
+         C(i,j) = 2|E|·R_eff(i,j)
+    """
+
+    # ------------------------------------------------------------------ #
+    #  Grid helpers                                                        #
+    # ------------------------------------------------------------------ #
+
+    ROWS = 3
+    COLS = 4
+    DX = 2.1  # horizontal spacing
+    DY = 2.0  # vertical spacing
+    GRID_LEFT = -4.5
+
+    def _node_pos(self, r, c):
+        """Manim position of grid node (row r, col c)."""
+        x = self.GRID_LEFT + c * self.DX
+        y = (self.ROWS - 1) / 2 * self.DY - r * self.DY
+        return np.array([x, y, 0.0])
+
+    def _node_index(self, r, c):
+        return r * self.COLS + c
+
+    def _build_grid(self):
+        """
+        Return (positions, edge_list, dot_objects, edge_objects).
+        edge_list : list of (i, j) node-index pairs (i < j)
+        """
+        N = self.ROWS * self.COLS
+        positions = [
+            self._node_pos(r, c) for r in range(self.ROWS) for c in range(self.COLS)
+        ]
+
+        edge_list = []
+        for r in range(self.ROWS):
+            for c in range(self.COLS):
+                idx = self._node_index(r, c)
+                if c + 1 < self.COLS:  # horizontal edge
+                    edge_list.append((idx, self._node_index(r, c + 1)))
+                if r + 1 < self.ROWS:  # vertical edge
+                    edge_list.append((idx, self._node_index(r + 1, c)))
+
+        dots = [Dot(positions[k], radius=0.13, color=DEFAULT_COLOR) for k in range(N)]
+
+        edges = {
+            (i, j): Line(
+                positions[i], positions[j], color=DEFAULT_COLOR, stroke_width=3
+            )
+            for (i, j) in edge_list
+        }
+
+        return positions, edge_list, dots, edges
+
+    # ------------------------------------------------------------------ #
+    #  Counter widget                                                      #
+    # ------------------------------------------------------------------ #
+
+    def _make_counter(self, n_edges):
+        """
+        Return (VGroup widget, DecimalNumber value_mob, Integer n_edges_mob).
+        Counter displays:  avg_commute / |E| = ???
+        """
+        label = Text("commute / |E| =", font_size=22)
+        val = DecimalNumber(
+            0.0,
+            num_decimal_places=2,
+            font_size=26,
+            color=ACCENT_COLOR,
+        )
+        val.next_to(label, RIGHT, buff=0.18)
+
+        n_lbl = Text(f"|E| = {n_edges}", font_size=18).next_to(label, DOWN, buff=0.18)
+        n_lbl.align_to(label, LEFT)
+
+        box = VGroup(label, val, n_lbl)
+        box.to_corner(UR, buff=0.35)
+        return box, val, n_lbl
+
+    # ------------------------------------------------------------------ #
+    #  Random-walk helpers                                                 #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _adjacency(edge_list, n_nodes):
+        adj = [[] for _ in range(n_nodes)]
+        for i, j in edge_list:
+            adj[i].append(j)
+            adj[j].append(i)
+        return adj
+
+    @staticmethod
+    def _random_walk_to(start, target, adj, rng, max_steps=2000):
+        """Walk until we reach *target*; return list of node indices visited."""
+        path = [start]
+        cur = start
+        for _ in range(max_steps):
+            if cur == target:
+                break
+            nxt = rng.choice(adj[cur])
+            path.append(nxt)
+            cur = nxt
+        return path
+
+    def _round_trip(self, start, target, adj, rng):
+        """s → t walk concatenated with t → s walk (share one endpoint)."""
+        leg1 = self._random_walk_to(start, target, adj, rng)
+        leg2 = self._random_walk_to(target, start, adj, rng)
+        return leg1 + leg2[1:]  # avoid duplicating the target node
+
+    # ------------------------------------------------------------------ #
+    #  Animation primitives                                                #
+    # ------------------------------------------------------------------ #
+
+    def _animate_walk_slow(self, path, positions, dot, step_time, max_anim_steps=32):
+        """
+        Animate a dot moving step-by-step; each edge leaves a fading trail.
+        If the path is longer than *max_anim_steps*, only the first
+        max_anim_steps hops are shown step-by-step.  An ellipsis label
+        appears briefly to signal that the walk continues off-screen.
+        """
+        display_path = path[: max_anim_steps + 1]
+        truncated = len(path) - 1 > max_anim_steps
+
+        trail_segs = []
+        for k in range(1, len(display_path)):
+            p0 = positions[display_path[k - 1]]
+            p1 = positions[display_path[k]]
+            seg = Line(p0, p1, color=dot.get_color(), stroke_width=8)
+            self.add(seg)
+            self.play(dot.animate.move_to(p1), run_time=step_time, rate_func=linear)
+            trail_segs.append(seg)
+
+        if truncated:
+            ellipsis = Text("...", font_size=36, color=dot.get_color())
+            ellipsis.next_to(dot, UP, buff=0.15)
+            self.play(FadeIn(ellipsis, run_time=0.25))
+            self.wait(0.5)
+            # Snap the dot to the true endpoint without animation
+            true_end = positions[path[-1]]
+            self.play(FadeOut(ellipsis, run_time=0.2))
+            self.play(dot.animate.move_to(true_end), run_time=0.3)
+
+        # Fade all trail segments together
+        if trail_segs:
+            self.play(*[FadeOut(s) for s in trail_segs], run_time=1.2)
+
+    def _animate_walk_flash(self, path, positions, color=None):
+        """Flash the full path as a polyline then fade it out quickly."""
+        if color is None:
+            color = COLOR_CYCLE[4]
+        pts = [positions[n] for n in path]
+        poly = VMobject(color=color, stroke_width=8, stroke_opacity=0.8)
+        poly.set_points_as_corners(pts)
+        self.play(Create(poly, run_time=0.35, rate_func=linear))
+        self.play(FadeOut(poly, run_time=0.5))
+
+    def _animate_walk_medium(
+        self, path, positions, dot, run_time, fade_run_time=0.75, color=None
+    ):
+        """
+        Move *dot* along *path* in a single self.play call.
+
+        A coloured trail is drawn simultaneously via Create so the dot
+        always sits at the tip of the growing trail.  The trail then
+        fades out, leaving the dot at the end of the path.
+
+        This produces exactly 2 self.play calls regardless of path length,
+        keeping the total animation count low enough for manim-slides to
+        concatenate without errors.
+        """
+        if color is None:
+            color = dot.get_color()
+        pts = [positions[n] for n in path]
+        trail = VMobject(color=color, stroke_width=8, stroke_opacity=0.85)
+        trail.set_points_as_corners(pts)
+        # Ensure dot starts at the correct position
+        dot.move_to(pts[0])
+        self.play(
+            Create(trail, rate_func=linear),
+            MoveAlongPath(dot, trail, rate_func=linear),
+            run_time=run_time,
+        )
+        self.play(FadeOut(trail), run_time=fade_run_time)
+
+    # ------------------------------------------------------------------ #
+    #  construct                                                           #
+    # ------------------------------------------------------------------ #
+
+    def construct(self):
+        rng = np.random.default_rng(42)
+        N = self.ROWS * self.COLS
+
+        # s = row 1, col 0 (left-middle);  t = row 1, col 3 (right-middle)
+        IDX_S = self._node_index(1, 0)
+        IDX_T = self._node_index(1, 3)
+
+        positions, full_edge_list, dots, edge_mobs = self._build_grid()
+
+        NI = self._node_index  # shorthand
+
+        # ── Canned walks for pedagogically clear slow illustrations. ──────────
+        # Walk 1: go via the top row to t, return via the bottom row to s.
+        canned_walk1 = [
+            IDX_S,
+            NI(0, 0),
+            NI(0, 1),
+            NI(0, 2),
+            NI(0, 3),
+            IDX_T,
+            NI(2, 3),
+            NI(2, 2),
+            NI(2, 1),
+            NI(2, 0),
+            IDX_S,
+        ]
+        # Walk 2: brief detour up through col-1 before crossing, direct return.
+        canned_walk2 = [
+            IDX_S,
+            NI(1, 1),
+            NI(0, 1),
+            NI(0, 2),
+            NI(1, 2),
+            IDX_T,
+            NI(1, 2),
+            NI(1, 1),
+            IDX_S,
+        ]
+        # Bottleneck walk: bounces near the bridge before eventually crossing.
+        canned_bot_walk = [
+            IDX_S,
+            NI(1, 1),
+            NI(0, 1),
+            NI(1, 1),
+            NI(2, 1),
+            NI(1, 1),
+            NI(1, 2),
+            NI(0, 2),
+            NI(1, 2),
+            IDX_T,
+            NI(0, 3),
+            NI(0, 2),
+            NI(1, 2),
+            NI(1, 1),
+            IDX_S,
+        ]
+
+        # ============================================================
+        # Slide 1 – Title
+        # ============================================================
+        title = Text("Effective Resistance & Commute Time", font_size=44)
+        subtitle = Text("How many paths are there between two nodes?", font_size=28)
+        subtitle.next_to(title, DOWN, buff=0.45)
+        self.play(Write(title))
+        self.play(FadeIn(subtitle, shift=UP * 0.15))
+        self.marked_next_slide()
+        self.play(FadeOut(title), FadeOut(subtitle))
+
+        # ============================================================
+        # Slide 2 – Reveal 4×4 grid
+        # ============================================================
+        all_edge_mobs = VGroup(*edge_mobs.values())
+        all_dots = VGroup(*dots)
+
+        self.play(LaggedStart(*[FadeIn(d, scale=1.4) for d in dots], lag_ratio=0.04))
+        self.play(Create(all_edge_mobs, run_time=1.2, lag_ratio=0.04))
+
+        # Colour s and t
+        dot_s = dots[IDX_S]
+        dot_t = dots[IDX_T]
+        lbl_s = Text("source", font_size=28, color=COLOR_CYCLE[0]).next_to(
+            dot_s, LEFT, buff=0.2
+        )
+        lbl_t = Text("target", font_size=28, color=COLOR_CYCLE[1]).next_to(
+            dot_t, RIGHT, buff=0.2
+        )
+        self.play(
+            dot_s.animate.set_color(COLOR_CYCLE[0]).scale(1.6).set_z_index(4),
+            dot_t.animate.set_color(COLOR_CYCLE[1]).scale(1.6).set_z_index(4),
+            FadeIn(lbl_s),
+            FadeIn(lbl_t),
+        )
+        self.marked_next_slide()
+
+        # ============================================================
+        # Slide 3 – Commute-time definition + counter
+        # ============================================================
+        defn = Text(
+            "Commute time  C(s, t)  =  expected steps for  s → t → s",
+            font_size=24,
+        ).to_edge(DOWN, buff=0.5)
+        self.play(FadeIn(defn, shift=UP * 0.1))
+
+        n_edges_full = len(full_edge_list)
+        counter_grp, counter_val, counter_ne_lbl = self._make_counter(n_edges_full)
+        self.play(FadeIn(counter_grp))
+        self.marked_next_slide()
+
+        # ============================================================
+        # Phase 2 – Walks on full grid
+        # ============================================================
+        adj_full = self._adjacency(full_edge_list, N)
+
+        # -- Walk 1 (slow, canned: scenic route via top and bottom rows) ------
+        walk_dot = Dot(positions[IDX_S], radius=0.08, color=COLOR_CYCLE[3])
+        self.add(walk_dot)
+        self._animate_walk_slow(canned_walk1, positions, walk_dot, step_time=0.42)
+
+        commute_steps = [len(canned_walk1) - 1]  # steps = hops = len(path)-1
+        rolling_avg = np.mean(commute_steps)
+        self.play(counter_val.animate.set_value(rolling_avg / n_edges_full))
+        self.marked_next_slide()
+
+        # -- Walk 2 (faster, canned: detour then direct return) ----------------
+        self._animate_walk_slow(
+            canned_walk2, positions, walk_dot, step_time=0.22, max_anim_steps=20
+        )
+
+        commute_steps.append(len(canned_walk2) - 1)
+        rolling_avg = np.mean(commute_steps)
+        self.play(counter_val.animate.set_value(rolling_avg / n_edges_full))
+        self.marked_next_slide()
+
+        for k in range(16):
+            walk = self._round_trip(IDX_S, IDX_T, adj_full, rng)
+            self._animate_walk_medium(
+                walk,
+                positions,
+                walk_dot,
+                run_time=4.0 / (k + 1),
+                fade_run_time=1.0 / np.sqrt(k + 1),
+            )
+
+            commute_steps.append(len(walk) - 1)
+            rolling_avg = np.mean(commute_steps)
+            self.play(
+                counter_val.animate.set_value(rolling_avg / n_edges_full),
+                run_time=1.0 / np.sqrt(k + 1),
+            )
+        self.play(FadeOut(walk_dot))
+
+        self.marked_next_slide()
+
+        # -- Fast flash walks (10 more) ------------------------------
+        # self.play(FadeOut(walk_dot))
+        # for k in range(10):
+        #     wk = self._round_trip(IDX_S, IDX_T, adj_full, rng)
+        #     commute_steps.append(len(wk) - 1)
+        #     self._animate_walk_flash(wk, positions, color=COLOR_CYCLE[3])
+        #     rolling_avg = np.mean(commute_steps)
+        #     self.play(
+        #         counter_val.animate.set_value(rolling_avg / n_edges_full),
+        #         run_time=(0.66 / np.sqrt(k + 1)),
+        #     )
+
+        caption_full = Text(
+            "Many paths  →  short average commute  →  low  R_eff",
+            font_size=24,
+            color=COLOR_CYCLE[2],
+        ).to_edge(DOWN, buff=0.5)
+        self.play(FadeOut(defn), FadeIn(caption_full))
+        full_avg_val = rolling_avg / n_edges_full
+        self.marked_next_slide()
+
+        # ============================================================
+        # Phase 3 – Prune to bottleneck
+        # ============================================================
+        # Remove all horizontal edges crossing cols 1→2 except the one
+        # at row 1 (the bridge row). Also remove most col 2→3 cross-edges
+        # to really force the walker through the bottleneck.
+        # Bridge = horizontal edge (row=1, col1→col2).
+        bridge_idx_pair = (
+            self._node_index(1, 1),
+            self._node_index(1, 2),
+        )
+
+        # Edges to prune: all horizontal edges in cols 1→2 except the bridge.
+        edges_to_prune = []
+        for r in range(self.ROWS):
+            for c in range(self.COLS - 1):
+                i = self._node_index(r, c)
+                j = self._node_index(r, c + 1)
+                key = (min(i, j), max(i, j))
+                # Keep only the bridge and the outermost column edges
+                if c == 1 and r != 1:
+                    edges_to_prune.append(key)
+
+        # Also prune the direct horizontal edges cols 0→1 (rows 0 and 3)
+        # so that the bridge is the dominant bottleneck.
+        extra_prune = [
+            (self._node_index(0, 0), self._node_index(0, 1)),
+            (self._node_index(2, 0), self._node_index(2, 1)),
+        ]
+        for ep in extra_prune:
+            edges_to_prune.append(ep)
+
+        # Deduplicate
+        edges_to_prune = list({(min(a, b), max(a, b)) for a, b in edges_to_prune})
+
+        pruned_mobs = [edge_mobs[k] for k in edges_to_prune if k in edge_mobs]
+        pruned_set = set(edges_to_prune)
+
+        self.play(FadeOut(caption_full))
+        prune_caption = Text("Prune to a single bridge", font_size=28).to_edge(
+            DOWN, buff=0.5
+        )
+        self.play(Write(prune_caption))
+        self.play(
+            LaggedStart(*[FadeOut(m) for m in pruned_mobs], lag_ratio=0.12),
+            run_time=1.2,
+        )
+
+        # # Highlight the bridge
+        # bridge_key = (min(bridge_idx_pair), max(bridge_idx_pair))
+        # bridge_mob = edge_mobs[bridge_key]
+        # self.play(bridge_mob.animate.set_color(HIGHLIGHT_COLOR).set_stroke(width=6))
+
+        # Rebuild adjacency on pruned graph
+        pruned_edge_list = [
+            (i, j)
+            for (i, j) in full_edge_list
+            if (min(i, j), max(i, j)) not in pruned_set
+        ]
+        n_edges_pruned = len(pruned_edge_list)
+        adj_pruned = self._adjacency(pruned_edge_list, N)
+
+        # Update |E| label
+        new_ne_lbl = Text(f"|E| = {n_edges_pruned}", font_size=18).move_to(
+            counter_ne_lbl
+        )
+        new_ne_lbl.align_to(counter_ne_lbl, LEFT)
+        self.play(
+            FadeOut(counter_ne_lbl),
+            FadeIn(new_ne_lbl),
+            run_time=0.5,
+        )
+        counter_ne_lbl = new_ne_lbl
+
+        self.marked_next_slide()
+
+        # -- Walk on bottleneck (canned: shows bouncing at bridge) ------------
+        self.play(FadeOut(prune_caption))
+        commute_steps_bot = []
+
+        walk_dot2 = Dot(positions[IDX_S], radius=0.08, color=COLOR_CYCLE[3])
+        self.add(walk_dot2)
+        self._animate_walk_slow(
+            canned_bot_walk, positions, walk_dot2, step_time=0.32, max_anim_steps=22
+        )
+
+        commute_steps_bot.append(len(canned_bot_walk) - 1)
+        rolling_avg_bot = np.mean(commute_steps_bot)
+        self.play(counter_val.animate.set_value(rolling_avg_bot / n_edges_pruned))
+        self.marked_next_slide()
+
+        for k in range(16):
+            walk = self._round_trip(IDX_S, IDX_T, adj_pruned, rng)
+            self._animate_walk_medium(
+                walk,
+                positions,
+                walk_dot2,
+                run_time=4.0 / (k + 1),
+                fade_run_time=1.0 / np.sqrt(k + 1),
+            )
+
+            commute_steps.append(len(walk) - 1)
+            rolling_avg = np.mean(commute_steps)
+            self.play(
+                counter_val.animate.set_value(rolling_avg / n_edges_pruned),
+                run_time=1.0 / np.sqrt(k + 1),
+            )
+
+        self.marked_next_slide()
+
+        self.play(FadeOut(walk_dot2))
+
+        # # -- Fast flash walks on bottleneck (8 more) -----------------
+        # for k in range(8):
+        #     wk = self._round_trip(IDX_S, IDX_T, adj_pruned, rng)
+        #     commute_steps_bot.append(len(wk) - 1)
+        #     self._animate_walk_flash(wk, positions, color=COLOR_CYCLE[4])
+        #     rolling_avg_bot = np.mean(commute_steps_bot)
+        #     self.play(
+        #         counter_val.animate.set_value(rolling_avg_bot / n_edges_pruned),
+        #         run_time=0.25,
+        #     )
+
+        bottleneck_avg_val = rolling_avg_bot / n_edges_pruned
+
+        # Side-by-side comparison annotations
+        ann_full = MathTex(
+            rf"\text{{full graph: }}\approx {full_avg_val:.2f}",
+            color=COLOR_CYCLE[2],
+            font_size=26,
+        ).to_edge(DOWN, buff=1.1)
+        ann_bot = MathTex(
+            rf"\text{{bottleneck: }}\approx {bottleneck_avg_val:.2f}",
+            color=HIGHLIGHT_COLOR,
+            font_size=26,
+        ).to_edge(DOWN, buff=0.55)
+        caption_bot = Text(
+            "Fewer paths  →  longer average commute  →  higher  R_eff",
+            font_size=24,
+            color=HIGHLIGHT_COLOR,
+        ).to_edge(DOWN, buff=0.5)
+
+        self.play(FadeIn(ann_full), FadeIn(ann_bot))
+        self.marked_next_slide()
+
+        self.play(FadeOut(ann_full), FadeOut(ann_bot), FadeIn(caption_bot))
+        self.marked_next_slide()
+
+        # ============================================================
+        # Phase 4 – Formulas
+        # ============================================================
+        everything = VGroup(
+            all_edge_mobs,
+            all_dots,
+            lbl_s,
+            lbl_t,
+            counter_grp,
+            caption_bot,
+        )
+        self.play(FadeOut(everything), run_time=0.8)
+
+        form_title = Text("Effective Resistance — formal definition", font_size=34)
+        form_title.shift(UP * 2.6)
+
+        lap_def = MathTex(
+            r"L_{ij} = \begin{cases}"
+            r"\deg(i) & i = j \\"
+            r"-1 & \{i,j\} \in E \\"
+            r"0 & \text{otherwise}"
+            r"\end{cases}",
+            font_size=34,
+        ).next_to(form_title, DOWN, buff=0.5)
+
+        reff_form = MathTex(
+            r"R_{\mathrm{eff}}(i,j) \;=\; "
+            r"(\mathbf{e}_i - \mathbf{e}_j)^\top \, L^+ \, (\mathbf{e}_i - \mathbf{e}_j)",
+            font_size=34,
+        ).next_to(lap_def, DOWN, buff=0.5)
+
+        commute_form = MathTex(
+            r"C(i,j) \;=\; 2\,|E|\cdot R_{\mathrm{eff}}(i,j)",
+            font_size=34,
+        ).next_to(reff_form, DOWN, buff=0.42)
+        commute_box = SurroundingRectangle(
+            commute_form, color=HIGHLIGHT_COLOR, buff=0.16, stroke_width=3
+        )
+        commute_note = Text(
+            "More paths between i and j  ⟹  smaller R_eff  ⟹  shorter expected commute",
+            font_size=22,
+        ).next_to(commute_form, DOWN, buff=0.48)
+
+        self.play(Write(form_title))
+        self.play(Write(lap_def))
+        self.marked_next_slide()
+
+        self.play(Write(reff_form))
+        self.play(Write(commute_form), Create(commute_box))
+        self.play(FadeIn(commute_note, shift=UP * 0.1))
+        self.marked_next_slide()
+
+
 class ForceParameterization(TIMCSlide):
     def construct(self):
 
@@ -1745,3 +2537,98 @@ class ForceParameterization(TIMCSlide):
             ),
         )
         self.play(FadeOut(ghosts), FadeOut(param_text))
+
+
+class AnimatedUMAPOptimization(TIMCSlide):
+    """
+    Animated depiction of UMAP's stochastic optimization process.
+
+    Left panel: 10 random points in 2-D, with a highlighted pair (red vs blue).
+    Right panel: UMAP's low-dimensional embedding of those points, starting as
+                 a random scatter and gradually morphing into the final layout.
+
+    During the morph, the highlighted pair is tracked with red/blue dots in the
+    embedding; they start far apart and are pulled together as the optimization
+    proceeds, illustrating how UMAP's attractive forces operate on similar points.
+    """
+
+    def construct(self):
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
+        import sklearn.datasets as datasets
+
+        mnist = datasets.fetch_openml("mnist_784", as_frame=False, parser="liac-arff")
+        labels = mnist.target.astype(int)  # shape (70000,)
+
+        cmap = plt.get_cmap("Spectral")
+        norm = mcolors.Normalize(vmin=0, vmax=9)
+        rgba_colors = cmap(norm(labels))  # (70000, 4) float64, values in [0, 1]
+
+        umap_data = np.load("mnist_optimization_steps.npy")  # (n_frames, 70000, 2)
+
+        # Normalize UMAP coordinates to fit Manim's screen (~14 × 8 units).
+        # Use the global min/max across all frames to prevent clipping during animation.
+        data_min = umap_data.min(axis=(0, 1))  # (2,)
+        data_max = umap_data.max(axis=(0, 1))  # (2,)
+        vis_center = (data_min + data_max) / 2
+        vis_scale = min(
+            12.0 / (data_max[0] - data_min[0]),
+            7.0 / (data_max[1] - data_min[1]),
+        )
+
+        def _to_manim(frames_2d: np.ndarray) -> np.ndarray:
+            """Map raw 2-D UMAP coordinates to Manim scene coordinates."""
+            xy = (frames_2d - vis_center) * vis_scale
+            return np.hstack([xy, np.zeros((xy.shape[0], 1))])
+
+        # Initialize the PointCloud with per-point colors via add_points(rgbas=...).
+        # PMobject.set_color() only accepts a single colour; per-point colours must
+        # be supplied through the rgbas parameter of add_points().
+        STROKE_INITIAL = 6.0
+        STROKE_FINAL = 1.0
+        n_frames = len(umap_data)
+        # Linearly fade stroke_width from STROKE_INITIAL → STROKE_FINAL over a
+        # 50-frame window that ends exactly 500 frames before the last frame.
+        STROKE_FADE_END = n_frames - 500
+        STROKE_FADE_START = STROKE_FADE_END - 50
+
+        points = PMobject(stroke_width=STROKE_INITIAL)
+        points.add_points(_to_manim(umap_data[0]), rgbas=rgba_colors)
+        self.add(points)
+
+        # Track the "Time" or "Epoch"
+        epoch_tracker = ValueTracker(0)
+
+        def update_points(obj):
+            current_epoch = epoch_tracker.get_value()
+            idx = int(current_epoch)
+            alpha = current_epoch % 1
+
+            # Linear interpolation between pre-computed frames.
+            # When tracker reaches the last frame idx == len-1, alpha == 0 and
+            # the branch below would be skipped, leaving points at the penultimate
+            # position.  The else clause handles that edge case explicitly.
+            if idx < len(umap_data) - 1:
+                new_pos = (1 - alpha) * umap_data[idx] + alpha * umap_data[idx + 1]
+            else:
+                new_pos = umap_data[-1]
+            obj.set_points(_to_manim(new_pos))
+
+            # Smoothly interpolate stroke_width down to STROKE_FINAL over the
+            # transition window [STROKE_FADE_START, STROKE_FADE_END].
+            t = (current_epoch - STROKE_FADE_START) / (
+                STROKE_FADE_END - STROKE_FADE_START
+            )
+            t = max(0.0, min(1.0, t))
+            obj.stroke_width = STROKE_INITIAL + (STROKE_FINAL - STROKE_INITIAL) * t
+
+        points.add_updater(update_points)
+
+        # Animate the tracker, not the dots
+        self.play(
+            epoch_tracker.animate.set_value(len(umap_data) - 1),
+            run_time=20,
+            rate_func=linear,
+        )
+        points.remove_updater(update_points)
+        self.marked_next_slide()
