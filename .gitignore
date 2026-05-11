@@ -211,6 +211,9 @@ __marimo__/
 slides/
 media/
 slide_states/
+
+# Large data files
+*.npy
 evoc_tmls_assets/
 Summary_assets/
 
