@@ -720,6 +720,23 @@ def _normalize_to_axes(X):
     return X
 
 
+class PMFadeOut(Animation):
+    """FadeOut for PMobject.
+
+    Manim's built-in FadeOut uses Mobject.fade(), which is a no-op for
+    PMobject (it never touches rgbas[:,3]).  This subclass interpolates
+    the alpha channel directly and sets remover=True so the scene removes
+    the object automatically when the animation ends.
+    """
+
+    def __init__(self, mob: PMobject, **kwargs):
+        self._orig_alphas = mob.rgbas[:, 3].copy()
+        super().__init__(mob, remover=True, **kwargs)
+
+    def interpolate_mobject(self, alpha: float) -> None:
+        self.mobject.rgbas[:, 3] = self._orig_alphas * (1.0 - alpha)
+
+
 # ---------------------------------------------------------------------------
 # Cairo base class
 # ---------------------------------------------------------------------------
@@ -1819,7 +1836,10 @@ class EffectiveResistanceCommute(TIMCSlide):
                 if r + 1 < self.ROWS:  # vertical edge
                     edge_list.append((idx, self._node_index(r + 1, c)))
 
-        dots = [Dot(positions[k], radius=0.13, color=DEFAULT_COLOR) for k in range(N)]
+        dots = [
+            Dot(positions[k], radius=0.13, color=DEFAULT_COLOR).set_z_index(2)
+            for k in range(N)
+        ]
 
         edges = {
             (i, j): Line(
@@ -1837,23 +1857,32 @@ class EffectiveResistanceCommute(TIMCSlide):
     def _make_counter(self, n_edges):
         """
         Return (VGroup widget, DecimalNumber value_mob, Integer n_edges_mob).
-        Counter displays:  avg_commute / |E| = ???
+        Counter displays:  avg_walk_length / |E| = ???
         """
-        label = Text("commute / |E| =", font_size=22)
+        path_label = Text("Walk length", font_size=24)
+        path_val = DecimalNumber(
+            0,
+            num_decimal_places=0,
+            font_size=48,
+            color=ACCENT_COLOR,
+        )
+        path_val.next_to(path_label, DOWN, buff=0.18)
+        label = Tex(r"Average $\frac{\text{walk length}}{|E|}$", font_size=36)
+        label.next_to(path_val, DOWN, buff=0.4)
         val = DecimalNumber(
             0.0,
             num_decimal_places=2,
-            font_size=26,
+            font_size=48,
             color=ACCENT_COLOR,
         )
-        val.next_to(label, RIGHT, buff=0.18)
+        val.next_to(label, DOWN, buff=0.18)
 
         n_lbl = Text(f"|E| = {n_edges}", font_size=18).next_to(label, DOWN, buff=0.18)
         n_lbl.align_to(label, LEFT)
 
-        box = VGroup(label, val, n_lbl)
-        box.to_corner(UR, buff=0.35)
-        return box, val, n_lbl
+        box = VGroup(path_label, path_val, label, val)
+        box.to_edge(RIGHT, buff=0.35).move_to([box.get_center()[0], 0, 0])
+        return box, path_val, val
 
     # ------------------------------------------------------------------ #
     #  Random-walk helpers                                                 #
@@ -1905,8 +1934,13 @@ class EffectiveResistanceCommute(TIMCSlide):
             p0 = positions[display_path[k - 1]]
             p1 = positions[display_path[k]]
             seg = Line(p0, p1, color=dot.get_color(), stroke_width=8)
-            self.add(seg)
-            self.play(dot.animate.move_to(p1), run_time=step_time, rate_func=linear)
+            self.play(
+                dot.animate.move_to(p1),
+                Create(seg),
+                run_time=step_time,
+                rate_func=linear,
+            )
+            # self.add(seg)
             trail_segs.append(seg)
 
         if truncated:
@@ -1937,11 +1971,13 @@ class EffectiveResistanceCommute(TIMCSlide):
         self, path, positions, dot, run_time, fade_run_time=0.75, color=None
     ):
         """
-        Move *dot* along *path* in a single self.play call.
+        Move *dot* along *path* in a single self.play call, with the dot
+        leading and a trail growing behind it.
 
-        A coloured trail is drawn simultaneously via Create so the dot
-        always sits at the tip of the growing trail.  The trail then
-        fades out, leaving the dot at the end of the path.
+        UpdateFromAlphaFunc rebuilds the trail at each alpha tick using the
+        exact node positions, lagging exactly one segment behind the dot.
+        This is frame-rate independent — the trail always follows the grid
+        edges exactly regardless of how many hops per second are animated.
 
         This produces exactly 2 self.play calls regardless of path length,
         keeping the total animation count low enough for manim-slides to
@@ -1950,13 +1986,34 @@ class EffectiveResistanceCommute(TIMCSlide):
         if color is None:
             color = dot.get_color()
         pts = [positions[n] for n in path]
-        trail = VMobject(color=color, stroke_width=8, stroke_opacity=0.85)
-        trail.set_points_as_corners(pts)
-        # Ensure dot starts at the correct position
+        n_segs = len(pts) - 1
+
+        # Geometric path for MoveAlongPath.
+        walk_path = VMobject()
+        walk_path.set_points_as_corners(pts)
         dot.move_to(pts[0])
+
+        trail = VMobject(stroke_color=color, stroke_width=8, stroke_opacity=0.85)
+
+        def trail_updater(mob, alpha):
+            # Lag trail by exactly one segment so dot always leads.
+            lag_alpha = max(0.0, alpha - 1.0 / n_segs)
+            if lag_alpha < 1e-9:
+                mob.set_points_as_corners([pts[0], pts[0]])
+                return
+            seg_float = lag_alpha * n_segs
+            full_segs = int(seg_float)
+            partial = seg_float - full_segs
+            if full_segs >= n_segs:
+                mob.set_points_as_corners(pts)
+            else:
+                mid = pts[full_segs] + partial * (pts[full_segs + 1] - pts[full_segs])
+                mob.set_points_as_corners(list(pts[: full_segs + 1]) + [mid])
+
+        self.add(trail)
         self.play(
-            Create(trail, rate_func=linear),
-            MoveAlongPath(dot, trail, rate_func=linear),
+            UpdateFromAlphaFunc(trail, trail_updater, rate_func=linear),
+            MoveAlongPath(dot, walk_path, rate_func=linear),
             run_time=run_time,
         )
         self.play(FadeOut(trail), run_time=fade_run_time)
@@ -2064,13 +2121,13 @@ class EffectiveResistanceCommute(TIMCSlide):
         # Slide 3 – Commute-time definition + counter
         # ============================================================
         defn = Text(
-            "Commute time  C(s, t)  =  expected steps for  s → t → s",
+            "Commute time  C(source, target)  =  expected steps for  source → target → source",
             font_size=24,
         ).to_edge(DOWN, buff=0.5)
         self.play(FadeIn(defn, shift=UP * 0.1))
 
         n_edges_full = len(full_edge_list)
-        counter_grp, counter_val, counter_ne_lbl = self._make_counter(n_edges_full)
+        counter_grp, path_val, counter_val = self._make_counter(n_edges_full)
         self.play(FadeIn(counter_grp))
         self.marked_next_slide()
 
@@ -2086,7 +2143,8 @@ class EffectiveResistanceCommute(TIMCSlide):
 
         commute_steps = [len(canned_walk1) - 1]  # steps = hops = len(path)-1
         rolling_avg = np.mean(commute_steps)
-        self.play(counter_val.animate.set_value(rolling_avg / n_edges_full))
+        self.play(ChangeDecimalToValue(path_val, commute_steps[-1]))
+        self.play(ChangeDecimalToValue(counter_val, rolling_avg / n_edges_full))
         self.marked_next_slide()
 
         # -- Walk 2 (faster, canned: detour then direct return) ----------------
@@ -2096,7 +2154,8 @@ class EffectiveResistanceCommute(TIMCSlide):
 
         commute_steps.append(len(canned_walk2) - 1)
         rolling_avg = np.mean(commute_steps)
-        self.play(counter_val.animate.set_value(rolling_avg / n_edges_full))
+        self.play(ChangeDecimalToValue(path_val, commute_steps[-1]))
+        self.play(ChangeDecimalToValue(counter_val, rolling_avg / n_edges_full))
         self.marked_next_slide()
 
         for k in range(16):
@@ -2112,7 +2171,8 @@ class EffectiveResistanceCommute(TIMCSlide):
             commute_steps.append(len(walk) - 1)
             rolling_avg = np.mean(commute_steps)
             self.play(
-                counter_val.animate.set_value(rolling_avg / n_edges_full),
+                ChangeDecimalToValue(path_val, commute_steps[-1]),
+                ChangeDecimalToValue(counter_val, rolling_avg / n_edges_full),
                 run_time=1.0 / np.sqrt(k + 1),
             )
         self.play(FadeOut(walk_dot))
@@ -2203,21 +2263,23 @@ class EffectiveResistanceCommute(TIMCSlide):
         adj_pruned = self._adjacency(pruned_edge_list, N)
 
         # Update |E| label
-        new_ne_lbl = Text(f"|E| = {n_edges_pruned}", font_size=18).move_to(
-            counter_ne_lbl
-        )
-        new_ne_lbl.align_to(counter_ne_lbl, LEFT)
-        self.play(
-            FadeOut(counter_ne_lbl),
-            FadeIn(new_ne_lbl),
-            run_time=0.5,
-        )
-        counter_ne_lbl = new_ne_lbl
+        # new_ne_lbl = Text(f"|E| = {n_edges_pruned}", font_size=18).move_to(
+        #     counter_ne_lbl
+        # )
+        # new_ne_lbl.align_to(counter_ne_lbl, LEFT)
+        # self.play(
+        #     FadeOut(counter_ne_lbl),
+        #     FadeIn(new_ne_lbl),
+        #     run_time=0.5,
+        # )
+        # counter_ne_lbl = new_ne_lbl
 
         self.marked_next_slide()
 
         # -- Walk on bottleneck (canned: shows bouncing at bridge) ------------
         self.play(FadeOut(prune_caption))
+        self.play(ChangeDecimalToValue(path_val, 0))
+        self.play(ChangeDecimalToValue(counter_val, 0.0))
         commute_steps_bot = []
 
         walk_dot2 = Dot(positions[IDX_S], radius=0.08, color=COLOR_CYCLE[3])
@@ -2228,7 +2290,8 @@ class EffectiveResistanceCommute(TIMCSlide):
 
         commute_steps_bot.append(len(canned_bot_walk) - 1)
         rolling_avg_bot = np.mean(commute_steps_bot)
-        self.play(counter_val.animate.set_value(rolling_avg_bot / n_edges_pruned))
+        self.play(ChangeDecimalToValue(path_val, commute_steps_bot[-1]))
+        self.play(ChangeDecimalToValue(counter_val, rolling_avg_bot / n_edges_pruned))
         self.marked_next_slide()
 
         for k in range(16):
@@ -2241,10 +2304,11 @@ class EffectiveResistanceCommute(TIMCSlide):
                 fade_run_time=1.0 / np.sqrt(k + 1),
             )
 
-            commute_steps.append(len(walk) - 1)
-            rolling_avg = np.mean(commute_steps)
+            commute_steps_bot.append(len(walk) - 1)
+            rolling_avg_bot = np.mean(commute_steps_bot)
+            self.play(ChangeDecimalToValue(path_val, commute_steps_bot[-1]))
             self.play(
-                counter_val.animate.set_value(rolling_avg / n_edges_pruned),
+                ChangeDecimalToValue(counter_val, rolling_avg_bot / n_edges_pruned),
                 run_time=1.0 / np.sqrt(k + 1),
             )
 
@@ -2301,7 +2365,7 @@ class EffectiveResistanceCommute(TIMCSlide):
         )
         self.play(FadeOut(everything), run_time=0.8)
 
-        form_title = Text("Effective Resistance — formal definition", font_size=34)
+        form_title = Text("Effective Resistance", font_size=40)
         form_title.shift(UP * 2.6)
 
         lap_def = MathTex(
@@ -2320,16 +2384,12 @@ class EffectiveResistanceCommute(TIMCSlide):
         ).next_to(lap_def, DOWN, buff=0.5)
 
         commute_form = MathTex(
-            r"C(i,j) \;=\; 2\,|E|\cdot R_{\mathrm{eff}}(i,j)",
+            r"\frac{C(i,j)}{2\,|E|} \;=\; R_{\mathrm{eff}}(i,j)",
             font_size=34,
         ).next_to(reff_form, DOWN, buff=0.42)
         commute_box = SurroundingRectangle(
             commute_form, color=HIGHLIGHT_COLOR, buff=0.16, stroke_width=3
         )
-        commute_note = Text(
-            "More paths between i and j  ⟹  smaller R_eff  ⟹  shorter expected commute",
-            font_size=22,
-        ).next_to(commute_form, DOWN, buff=0.48)
 
         self.play(Write(form_title))
         self.play(Write(lap_def))
@@ -2337,7 +2397,244 @@ class EffectiveResistanceCommute(TIMCSlide):
 
         self.play(Write(reff_form))
         self.play(Write(commute_form), Create(commute_box))
-        self.play(FadeIn(commute_note, shift=UP * 0.1))
+        self.marked_next_slide()
+
+
+import networkx as nx
+
+
+class ElectricResistanceGrid(TIMCSlide):
+    """
+    Visualises effective resistance on a 3×4 grid as an electric circuit.
+
+    Slide flow
+    ----------
+    1. Reveal the grid – uniform grey nodes, uniform-thickness grey edges.
+    2. Scale up source and target; show "source"/"target" labels;
+       show a horizontal viridis colorbar along the bottom whose range
+       covers both the full and pruned graphs.
+    3. Wave animation: source node lights up first, then the rest of the
+       nodes colour-in by potential (high→low order) and edges thicken by
+       current (|Δv|).
+    4. Shift graph left; reveal right-aligned, vertically-centred info
+       box showing "Effective Resistance", source/target colour swatches,
+       and the numeric R_eff value.
+    5. Reset graph to grey/uniform (ground state), then fade out the
+       pruned edges, then redo the wave animation on the pruned graph,
+       and update R_eff in the info box.
+    """
+
+    # ── Grid geometry ────────────────────────────────────────────────── #
+    ROWS, COLS = 3, 4
+    DX, DY = 2.2, 1.7
+
+    # ── Visual constants ─────────────────────────────────────────────── #
+    NODE_R = 0.15  # default node radius
+    NODE_R_HL = 0.22  # highlighted (s, t) radius
+    EDGE_W_UNIFORM = 4.0  # uniform edge stroke before potential applied
+    EDGE_W_MIN = 1.5  # thinnest edge after potential applied
+    EDGE_W_MAX = 13.0  # thickest edge after potential applied
+    GRAPH_SHIFT = 2.0  # leftward shift for info-box slide
+
+    # ── Helpers ──────────────────────────────────────────────────────── #
+
+    def _node_pos(self, r, c):
+        x = -(self.COLS - 1) * self.DX / 2 + c * self.DX
+        y = (self.ROWS - 1) * self.DY / 2 - r * self.DY
+        return np.array([x, y, 0.0])
+
+    def _potentials(self, G, nodes, node_idx, source, target):
+        """Return potential array via pseudoinverse of Laplacian."""
+        L = nx.laplacian_matrix(G, nodelist=nodes).toarray().astype(float)
+        b = np.zeros(len(nodes))
+        b[node_idx[source]] = 1.0
+        b[node_idx[target]] = -1.0
+        return np.linalg.pinv(L) @ b
+
+    def _make_colorbar(self, cmap_fn, v_min, v_max):
+        """Return a horizontal VGroup colorbar along the bottom of the frame."""
+        N, total_w, height, y = 128, 10.0, 0.30, -3.25
+        rw = total_w / N
+        rects = VGroup(
+            *[
+                Rectangle(
+                    width=rw + 0.005,
+                    height=height,
+                    fill_color=cmap_fn(i / (N - 1)),
+                    fill_opacity=1.0,
+                    stroke_width=0,
+                ).move_to([-total_w / 2 + (i + 0.5) * rw, y, 0])
+                for i in range(N)
+            ]
+        )
+        border = Rectangle(
+            width=total_w + 0.02,
+            height=height + 0.01,
+            stroke_width=1.5,
+            stroke_color=DARK_GRAY,
+            fill_opacity=0,
+        ).move_to([0, y, 0])
+        lbl_lo = Text(f"{v_min:.2f}", font_size=17).next_to(rects[0], LEFT, buff=0.12)
+        lbl_hi = Text(f"{v_max:.2f}", font_size=17).next_to(rects[-1], RIGHT, buff=0.12)
+        title = Text("Potential", font_size=19).next_to(border, DOWN, buff=0.10)
+        return VGroup(rects, border, lbl_lo, lbl_hi, title)
+
+    # ── construct ────────────────────────────────────────────────────── #
+
+    def construct(self):
+        import networkx as nx
+        import matplotlib.cm as _cm
+
+        # ── Graphs ────────────────────────────────────────────────────────
+        G = nx.grid_2d_graph(self.ROWS, self.COLS)
+        source, target = (1, 0), (1, 3)
+        nodes = list(G.nodes())
+        node_idx = {nd: i for i, nd in enumerate(nodes)}
+
+        # Pruned graph: remove only the two middle-third edges (top and bottom
+        # of columns 1→2), leaving the left-third edges intact.
+        G2 = G.copy()
+        for e in [((0, 1), (0, 2)), ((2, 1), (2, 2))]:
+            G2.remove_edge(*e)
+
+        # ── Potentials ────────────────────────────────────────────────────
+        pot1 = self._potentials(G, nodes, node_idx, source, target)
+        pot2 = self._potentials(G2, nodes, node_idx, source, target)
+
+        # Colorbar range covers both graphs so colours are comparable.
+        v_min = min(pot1.min(), pot2.min())
+        v_max = max(pot1.max(), pot2.max())
+
+        R1 = float(pot1[node_idx[source]] - pot1[node_idx[target]])
+        R2 = float(pot2[node_idx[source]] - pot2[node_idx[target]])
+
+        # ── Colormap (matplotlib viridis) ─────────────────────────────────
+        _cm_obj = _cm.viridis
+
+        def cmap_fn(t):
+            r, g, b, _ = _cm_obj(float(np.clip(t, 0, 1)))
+            return "#{:02x}{:02x}{:02x}".format(
+                int(r * 255), int(g * 255), int(b * 255)
+            )
+
+        def pcol(val):
+            return cmap_fn((val - v_min) / (v_max - v_min + 1e-9))
+
+        # ── Edge stroke-width helper ──────────────────────────────────────
+        def sw(drop, mx):
+            frac = drop / (mx + 1e-9)
+            return self.EDGE_W_MIN + (self.EDGE_W_MAX - self.EDGE_W_MIN) * frac
+
+        mx1 = max(abs(pot1[node_idx[u]] - pot1[node_idx[v]]) for u, v in G.edges())
+        mx2 = max(abs(pot2[node_idx[u]] - pot2[node_idx[v]]) for u, v in G2.edges())
+
+        # ── Build initial mobjects (uniform grey style) ────────────────────
+        npos = {nd: self._node_pos(*nd) for nd in nodes}
+        dots = {nd: Dot(npos[nd], radius=self.NODE_R, color=GRAY) for nd in nodes}
+        emobs = {
+            (u, v): Line(npos[u], npos[v], stroke_width=self.EDGE_W_UNIFORM, color=GRAY)
+            for u, v in G.edges()
+        }
+
+        def em(u, v):
+            return emobs.get((u, v)) or emobs.get((v, u))
+
+        all_e = VGroup(*emobs.values())
+        all_n = VGroup(*dots.values())
+
+        # ── SLIDE 1: reveal plain grey grid ──────────────────────────────
+        self.play(Create(all_e), Create(all_n))
+        self.marked_next_slide()
+
+        # ── SLIDE 2: highlight s/t; "source"/"target" labels; colorbar ───
+        hl = self.NODE_R_HL / self.NODE_R
+        self.play(dots[source].animate.scale(hl), dots[target].animate.scale(hl))
+
+        s_lbl = Text("source", font_size=24).next_to(dots[source], LEFT, buff=0.25)
+        t_lbl = Text("target", font_size=24).next_to(dots[target], RIGHT, buff=0.25)
+        self.play(Write(s_lbl), Write(t_lbl))
+
+        cb = self._make_colorbar(cmap_fn, v_min, v_max)
+        self.play(FadeIn(cb))
+        self.marked_next_slide()
+
+        # ── SLIDE 3: wave animation — potentials + edge thicknesses ───────
+        def _wave_anim(pot, mx, graph_obj):
+            """Animate a potential wave and return the animations."""
+            src_anim = [dots[source].animate.set_color(pcol(pot[node_idx[source]]))]
+            others = sorted(
+                [nd for nd in nodes if nd != source],
+                key=lambda nd: -pot[node_idx[nd]],
+            )
+            n_anims = [
+                dots[nd].animate.set_color(pcol(pot[node_idx[nd]])) for nd in others
+            ]
+            e_anims = [
+                em(u, v).animate.set_stroke(
+                    width=sw(abs(pot[node_idx[u]] - pot[node_idx[v]]), mx),
+                    color=DARK_GRAY,
+                )
+                for u, v in graph_obj.edges()
+            ]
+            return src_anim, n_anims, e_anims
+
+        src_a1, n_a1, e_a1 = _wave_anim(pot1, mx1, G)
+        self.play(*src_a1)
+        self.play(LaggedStart(*n_a1, lag_ratio=0.12), *e_a1, run_time=2.5)
+        self.marked_next_slide()
+
+        # ── SLIDE 4: shift graph left; reveal right-aligned info box ──────
+        graph_grp = VGroup(all_e, all_n, s_lbl, t_lbl)
+        self.play(graph_grp.animate.shift(LEFT * self.GRAPH_SHIFT))
+
+        i_title = Text("Effective Resistance", font_size=26, color=DEFAULT_COLOR)
+        i_src = Dot(radius=0.13, color=pcol(pot1[node_idx[source]]))
+        i_minus = Text("−", font_size=30, color=DEFAULT_COLOR)
+        i_tgt = Dot(radius=0.13, color=pcol(pot1[node_idx[target]]))
+        i_swatches = VGroup(i_src, i_minus, i_tgt).arrange(RIGHT, buff=0.18)
+        reff_num = DecimalNumber(
+            R1, num_decimal_places=3, font_size=40, color=ACCENT_COLOR
+        )
+        info = VGroup(i_title, i_swatches, reff_num).arrange(DOWN, buff=0.30)
+        info.to_edge(RIGHT, buff=0.35)
+        info.move_to([info.get_center()[0], 0, 0])  # centre vertically
+
+        self.play(FadeIn(info))
+        self.marked_next_slide()
+
+        # ── SLIDE 5: reset → prune → reflow wave → update R_eff ──────────
+        # Reset graph to ground state (grey nodes, uniform edges).
+        # Also grey out the info-box swatches and zero the R_eff value.
+        reset_n = [dots[nd].animate.set_color(GRAY) for nd in nodes]
+        reset_e = [
+            em(u, v).animate.set_stroke(width=self.EDGE_W_UNIFORM, color=GRAY)
+            for u, v in G.edges()
+        ]
+        self.play(
+            *reset_n,
+            *reset_e,
+            i_src.animate.set_color(GRAY),
+            i_tgt.animate.set_color(GRAY),
+            ChangeDecimalToValue(reff_num, 0.0),
+            run_time=1.2,
+        )
+
+        # Fade out the two pruned middle-third edges.
+        prune_edges = [((0, 1), (0, 2)), ((2, 1), (2, 2))]
+        pm = [m for e in prune_edges if (m := em(*e)) is not None]
+        self.play(LaggedStart(*[FadeOut(m) for m in pm], lag_ratio=0.12), run_time=0.9)
+
+        # Redo the wave on the pruned graph.
+        src_a2, n_a2, e_a2 = _wave_anim(pot2, mx2, G2)
+        self.play(*src_a2)
+        self.play(LaggedStart(*n_a2, lag_ratio=0.12), *e_a2, run_time=2.5)
+
+        # Update info box: swatch colours and R_eff value.
+        self.play(
+            i_src.animate.set_color(pcol(pot2[node_idx[source]])),
+            i_tgt.animate.set_color(pcol(pot2[node_idx[target]])),
+            ChangeDecimalToValue(reff_num, R2),
+        )
         self.marked_next_slide()
 
 
@@ -2632,3 +2929,140 @@ class AnimatedUMAPOptimization(TIMCSlide):
         )
         points.remove_updater(update_points)
         self.marked_next_slide()
+
+
+class HighDLissajousKnotUMAP2DWithEdges(TIMCSlide):
+
+    _n_samples = 2000
+    _seed = 42
+    _generator_kwargs: dict = dict(
+        target_dim=512,
+        radius=2.0,
+        n_planes=5,
+        noise=0.01,
+        noise_hd=0.175,
+        dataset_type="highdim_loop",
+    )
+    _stroke_width = 16
+
+    def construct(self):
+        import umap
+
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+        mapper = umap.UMAP(
+            random_state=42,
+            n_components=3,
+            n_neighbors=16,
+            repulsion_strength=0.5,
+            n_epochs=500,
+        ).fit(X_embedded)
+        embedding_2d = _normalize_to_axes(
+            np.ascontiguousarray(mapper.embedding_[:, [0, 2]])
+        )
+
+        fade_point_indices = np.random.RandomState(42).choice(
+            self._n_samples, size=int(self._n_samples * 0.30), replace=False
+        )
+        fade_point_embedding_2d = embedding_2d[fade_point_indices]
+        fade_point_colors = [
+            colorcet.CET_C9[int(t / self._n_samples * (len(colorcet.CET_C9) - 1))]
+            for t in fade_point_indices
+        ]
+
+        axes = Axes(x_range=[-2.0, 2.0], y_range=[-2.0, 2.0])
+        points = self.create_points(embedding_2d, axes)
+        fade_points = [
+            Dot(axes.c2p(*pt), radius=0.03, color=c)
+            for pt, c in zip(fade_point_embedding_2d, fade_point_colors)
+        ]
+
+        self.camera.get_thickening_nudges = _types.MethodType(
+            lambda cam, t: _make_circular_nudges(t), self.camera
+        )
+
+        self.play(
+            LaggedStart(*[FadeIn(fp) for fp in fade_points], lag_ratio=0.01),
+            run_time=1.0,
+        )
+        self.play(FadeIn(points))
+
+        self.wait()
+        self.marked_next_slide()
+
+        # Build one VMobject per width bucket.
+        # Cairo sets line width once per draw call, so true per-segment widths
+        # require separate objects. Bucketing keeps the count to O(N_BUCKETS)
+        # instead of O(N_edges) while still conveying edge strength visually.
+        # Each edge A→B is packed as the degenerate cubic bezier [A, A, B, B].
+        N_BUCKETS = 64
+        EDGE_WIDTH_MIN = 0.01
+        EDGE_WIDTH_MAX = 1.0
+
+        graph = mapper.graph_.tocoo()
+        all_coords = np.array([axes.c2p(*pt) for pt in embedding_2d], dtype=np.float64)
+        src = all_coords[graph.row]  # (M, 3)
+        dst = all_coords[graph.col]  # (M, 3)
+        weights = np.asarray(graph.data, dtype=np.float64)
+        weights = (weights - weights.min()) / (
+            weights.max() - weights.min() + 1e-9
+        )  # normalise 0→1
+        bucket_idx = np.clip((weights * N_BUCKETS).astype(int), 0, N_BUCKETS - 1)
+
+        edge_grp = VGroup()
+        for b in range(N_BUCKETS):
+            mask = bucket_idx == b
+            if not mask.any():
+                continue
+            pts = np.empty((4 * mask.sum(), 3), dtype=np.float64)
+            pts[0::4] = src[mask]
+            pts[1::4] = src[mask]
+            pts[2::4] = dst[mask]
+            pts[3::4] = dst[mask]
+            w = EDGE_WIDTH_MIN + (EDGE_WIDTH_MAX - EDGE_WIDTH_MIN) * (
+                b / (N_BUCKETS - 1)
+            )
+            mob = VMobject(
+                stroke_width=w, stroke_color=GRAY, fill_opacity=0, stroke_opacity=w
+            )
+            mob.set_points(pts)
+            edge_grp.add(mob)
+
+        edge_grp.set_z_index(-1)
+        self.play(
+            LaggedStart(
+                *[FadeIn(mob) for mob in edge_grp],
+                lag_ratio=0.5,
+                run_time=2.0,
+            )
+        )
+
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(PMFadeOut(points))
+        self.play(
+            LaggedStart(*[FadeOut(fp) for fp in fade_points], lag_ratio=0.01),
+            run_time=0.5,
+        )
+        self.play(
+            edge_grp.animate.scale(2.75, about_point=(-3.0, -1.5, 0.0)),
+        )
+
+    def create_points(self, data: np.ndarray, axes) -> PMobject:
+        from manim.utils.color import color_to_rgba
+
+        coords = np.array(
+            [axes.c2p(*x) for x in data],
+            dtype=np.float64,
+        )
+        ts = np.linspace(0, 1, len(data))
+        rgbas = np.array(
+            [
+                color_to_rgba(colorcet.CET_C9[int(t * (len(colorcet.CET_C9) - 1))])
+                for t in ts
+            ]
+        )
+        pm = PMobject(stroke_width=self._stroke_width)
+        pm.add_points(coords, rgbas=rgbas)
+        return pm
