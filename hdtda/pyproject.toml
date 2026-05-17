@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "colorcet>=3.2.1",
+    "evoc>=0.3.1",
     "manim>=0.19.1",
     "manim-slides>=5.5.4",
     "numpy>=2.2.6",
+    "pandas>=2.3.3",
     "persim>=0.3.8",
     "pot>=0.9.6.post1",
     "ripser>=0.6.14",
