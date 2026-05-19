@@ -1,0 +1,39 @@
+# Intro
+VietorisRipsExplanation
+SimplicialHomologyExplanation
+PersistenceExplanation
+SphereShellVolume
+ShadedNNDistribution
+PersistanceDiagramExpectations
+ExampleCircleEmbeddingConstruction
+DynamicPersistenceAnimation
+# CircleEmbeddingPCAPersistenceDiagram
+LissajousKnotIntroduction
+LissajousKnot
+HighDLissajousPCA
+# LissajousKnotPersistenceDiagram
+HardHighDLissajousPCA
+HardHighDLissajousPCA5D
+DynamicPersistenceLissajousPCA
+# Damrich paper example
+ElectricResistanceGrid
+EffectiveResistanceCommute
+# LissajousKnotEffResPersistenceDiagram
+# From eff res to embedding
+HardHighDLissajousEffRes
+HardHighDLissajousEffRes5D
+# DynamicPersistenceLissajousEffRes ??
+UMAPExplanation
+HardHighDLissajousUMAP
+HardHighDLissajousUMAP5D
+# LissajousKnotEffResPersistenceDiagram
+HighDLissajousKnotUMAP2DWithEdges
+LEtoFDExplanation
+# FDComparisontoUMAP
+ForceParameterization
+# GeneralizedBetaPrime
+AnimatedUMAPOptimizationMNIST1
+AnimatedUMAPOptimizationMNIST3
+AnimatedUMAPOptimizationFashionMNIST1
+AnimatedUMAPOptimizationFashionMNIST3
+# Summary

@@ -819,7 +819,8 @@ class VietorisRipsExplanation(TIMCSlide):
         )
 
         self.play(
-            LaggedStart(*[FadeIn(dot, scale=2.0) for dot in pt_dots], lag_ratio=0.05)
+            LaggedStart(*[FadeIn(dot, scale=2.0) for dot in pt_dots], lag_ratio=0.05),
+            run_time=4.5,
         )
 
         self.marked_next_slide()
@@ -918,7 +919,7 @@ class VietorisRipsExplanation(TIMCSlide):
 
         self.play(
             r_tracker.animate.set_value(max_r / 6),
-            run_time=4.0,
+            run_time=12.0,
             rate_func=rate_functions.ease_out_quart,
         )
 
@@ -926,7 +927,7 @@ class VietorisRipsExplanation(TIMCSlide):
 
         self.play(
             r_tracker.animate.set_value(max_r / 3),
-            run_time=6.0,
+            run_time=16.0,
             rate_func=rate_functions.ease_in_quad,
         )
 
