@@ -2,23 +2,25 @@
 VietorisRipsExplanation
 SimplicialHomologyExplanation
 PersistenceExplanation
+# HighDimIntro
+# HighDExampleUseCases
 SphereShellVolume
 ShadedNNDistribution
 PersistanceDiagramExpectations
 ExampleCircleEmbeddingConstruction
 DynamicPersistenceAnimation
-# CircleEmbeddingPCAPersistenceDiagram
+# TransitionToLissajous
 LissajousKnotIntroduction
 LissajousKnot
 HighDLissajousPCA
-# LissajousKnotPersistenceDiagram
+LissajousKnotPersistenceDiagram
 HardHighDLissajousPCA
 HardHighDLissajousPCA5D
 DynamicPersistenceLissajousPCA
 # Damrich paper example
 ElectricResistanceGrid
 EffectiveResistanceCommute
-# LissajousKnotEffResPersistenceDiagram
+LissajousKnotPersistenceDiagramEffRes
 # From eff res to embedding
 HardHighDLissajousEffRes
 HardHighDLissajousEffRes5D
@@ -26,7 +28,7 @@ HardHighDLissajousEffRes5D
 UMAPExplanation
 HardHighDLissajousUMAP
 HardHighDLissajousUMAP5D
-# LissajousKnotEffResPersistenceDiagram
+CompareLissajousPersistence
 HighDLissajousKnotUMAP2DWithEdges
 LEtoFDExplanation
 # FDComparisontoUMAP

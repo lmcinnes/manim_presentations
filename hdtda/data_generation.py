@@ -2,6 +2,9 @@ import numpy as np
 from sklearn.decomposition import PCA
 from scipy.spatial.distance import pdist, squareform
 import matplotlib.pyplot as plt
+import pynndescent
+
+import scipy.sparse
 
 # Assuming ripser and persim are available in your environment
 # from ripser import ripser
@@ -870,6 +873,137 @@ def get_eff_res_spectral(adj, k=100):
     embedding = vecs / np.sqrt(vals)
 
     return embedding
+
+
+def compute_laplacian(A, normalization="none"):
+    """
+    Computes the Laplacian based ona an adjacency matrix given as np.ndarray or scipy.sparse matrix. Based on code by
+    Enrique Fita Sanmartin.
+
+    :param A: adjacency matrix given as np.ndarray or scipy.sparse matrix
+    :param normalization: whether to use no normalization ("none"), random walk normalization ("rw") or symmetric normalization ("sym")
+    :return: Laplacian matrix in the same format as A
+    """
+    # compute degree matrix
+    degs = A.sum(0)
+    if isinstance(A, np.ndarray):
+        D = np.diag(degs.flatten())
+    else:
+        D = scipy.sparse.diags(np.asarray(degs).reshape(-1), format="csc")
+
+    # compute non-normalized Laplacian
+    L = D - A
+
+    if normalization != "none":
+        assert degs.min() > 0, "Graph contains nodes with zero degree."
+
+        if normalization == "rw":
+            if isinstance(A, np.ndarray):
+                D_inv = np.diag(degs.flatten() ** (-1))
+            else:
+                D_inv = scipy.sparse.diags(
+                    np.asarray(degs).reshape(-1) ** (-1), format="csc"
+                )
+            L = D_inv @ L
+        elif normalization == "sym":
+            if isinstance(A, np.ndarray):
+                D_inv_sqrt = np.diag(degs.flatten() ** (-0.5))
+            else:
+                D_inv_sqrt = scipy.sparse.diags(
+                    np.asarray(degs).reshape(-1) ** (-0.5), format="csc"
+                )
+            L = D_inv_sqrt @ L @ D_inv_sqrt
+        else:
+            raise NotImplementedError
+    return L
+
+
+def compute_effective_resistance_connected(A):
+    """
+    Computes the effective resistance using the pseudoinverse of the Laplacian L^+ of a connected graph.
+
+    EffR[i,j]=L^+[i,i]+L^+[j,j]-2*L^+[i,j]
+
+    Based on code by Enrique Fita Sanmartin.
+
+    :param A: adjacency matrix (numpy or scipy.sparse array)
+    :return: all pairs of effective resistance distances (numpy array)
+    """
+
+    n = A.shape[0]
+    L = compute_laplacian(A)
+    if not isinstance(L, np.ndarray):
+        L = L.toarray()
+
+    Lpinv = np.linalg.inv(L + np.ones(L.shape) / n) - np.ones(L.shape) / n
+
+    Linv_diag = np.diag(Lpinv).reshape((n, 1))
+    EffR = Linv_diag * np.ones((1, n)) + np.ones((n, 1)) * Linv_diag.T - 2 * Lpinv
+
+    return EffR
+
+
+def compute_effective_resistance(A, disconnect=False):
+    if disconnect:
+        # compute connected components
+        n_components, component_labels = scipy.sparse.csgraph.connected_components(A)
+        EffR = (
+            np.ones(A.shape) * np.inf
+        )  # initialize EffR matrix to inf for correct value between connected components
+
+        for i in range(n_components):
+            component_mask = component_labels == i
+            component = np.where(component_mask)[0]
+            component_mask = component_mask[:, None] @ component_mask[None, :]
+            if scipy.sparse.issparse(A):
+                A = A.tocsr()
+            # compute effective resistance on component
+            EffR_component = compute_effective_resistance_connected(
+                A[component, :][:, component]
+            )  # funny slicing for sparse matrices
+            EffR[component_mask] = EffR_component.flatten()
+
+    else:
+        EffR = compute_effective_resistance_connected(A)
+
+    print(EffR)
+    # replace infinite values with twice the maximal finite value
+    max_EffR = np.max(EffR[np.isfinite(EffR)])
+    EffR[np.isinf(EffR)] = max_EffR * 2
+    return EffR
+
+
+def correct_eff_res(d, adj):
+    degs = np.array(adj.sum(axis=1))
+    deg_dist = 1 / degs + 1 / degs.T
+    np.fill_diagonal(deg_dist, 0)
+    return d - deg_dist + 2 * adj.toarray() / (degs * degs.T)
+
+
+def get_eff_res(X, k, corrected=True):
+    sknn_coo = (
+        pynndescent.PyNNDescentTransformer(n_neighbors=k, metric="euclidean")
+        .fit_transform(X)
+        .tocoo()
+    )
+
+    # invert as edge weights are reciprocal of resistance
+    # sknn_coo.data = 1 / sknn_coo.data
+    sknn_coo.data = np.ones_like(sknn_coo.data)  # unweighted graph
+    # sknn_coo.data = np.exp(
+    #     -(sknn_coo.data - sknn_coo.data.min()) / sknn_coo.data.std()
+    # )  # convert to similarity
+    sknn_coo = sknn_coo.maximum(sknn_coo.T)  # make symmetric
+    print(sknn_coo.data)
+
+    # compute effective resistance
+    d_eff = compute_effective_resistance(sknn_coo, disconnect=True)
+
+    # optionally: correct via von Luxburg fix
+    if corrected:
+        d_eff = correct_eff_res(d_eff, sknn_coo)
+
+    return d_eff
 
 
 def effective_resistance_distance_embedding(X, target_dim=3):
