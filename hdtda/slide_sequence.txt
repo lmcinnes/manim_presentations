@@ -24,11 +24,12 @@ LissajousKnotPersistenceDiagramEffRes
 # From eff res to embedding
 HardHighDLissajousEffRes
 HardHighDLissajousEffRes5D
-# DynamicPersistenceLissajousEffRes ??
+DynamicPersistenceLissajousEffResEmb
 UMAPExplanation
 HardHighDLissajousUMAP
 HardHighDLissajousUMAP5D
 CompareLissajousPersistence
+# TransitionToWhatWorks
 HighDLissajousKnotUMAP2DWithEdges
 LEtoFDExplanation
 # FDComparisontoUMAP
