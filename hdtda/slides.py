@@ -232,143 +232,6 @@ class ForceParameterization(TIMCSlide):
         self.play(FadeOut(ghosts), FadeOut(param_text))
 
 
-class HighDLissajousKnotUMAP2DWithEdges(TIMCSlide):
-
-    _n_samples = 2000
-    _seed = 42
-    _generator_kwargs: dict = dict(
-        target_dim=512,
-        radius=2.0,
-        n_planes=5,
-        noise=0.01,
-        noise_hd=0.175,
-        dataset_type="highdim_loop",
-    )
-    _stroke_width = 16
-
-    def construct(self):
-        import umap
-
-        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
-        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
-        mapper = umap.UMAP(
-            random_state=42,
-            n_components=3,
-            n_neighbors=16,
-            repulsion_strength=0.5,
-            n_epochs=500,
-        ).fit(X_embedded)
-        embedding_2d = _normalize_to_axes(
-            np.ascontiguousarray(mapper.embedding_[:, [0, 2]])
-        )
-
-        fade_point_indices = np.random.RandomState(42).choice(
-            self._n_samples, size=int(self._n_samples * 0.30), replace=False
-        )
-        fade_point_embedding_2d = embedding_2d[fade_point_indices]
-        fade_point_colors = [
-            colorcet.CET_C9[int(t / self._n_samples * (len(colorcet.CET_C9) - 1))]
-            for t in fade_point_indices
-        ]
-
-        axes = Axes(x_range=[-2.0, 2.0], y_range=[-2.0, 2.0])
-        points = self.create_points(embedding_2d, axes)
-        fade_points = [
-            Dot(axes.c2p(*pt), radius=0.03, color=c)
-            for pt, c in zip(fade_point_embedding_2d, fade_point_colors)
-        ]
-
-        self.camera.get_thickening_nudges = _types.MethodType(
-            lambda cam, t: _make_circular_nudges(t), self.camera
-        )
-
-        self.play(
-            LaggedStart(*[FadeIn(fp) for fp in fade_points], lag_ratio=0.01),
-            run_time=1.0,
-        )
-        self.play(FadeIn(points))
-
-        self.wait()
-        self.marked_next_slide()
-
-        # Build one VMobject per width bucket.
-        # Cairo sets line width once per draw call, so true per-segment widths
-        # require separate objects. Bucketing keeps the count to O(N_BUCKETS)
-        # instead of O(N_edges) while still conveying edge strength visually.
-        # Each edge A→B is packed as the degenerate cubic bezier [A, A, B, B].
-        N_BUCKETS = 64
-        EDGE_WIDTH_MIN = 0.01
-        EDGE_WIDTH_MAX = 1.0
-
-        graph = mapper.graph_.tocoo()
-        all_coords = np.array([axes.c2p(*pt) for pt in embedding_2d], dtype=np.float64)
-        src = all_coords[graph.row]  # (M, 3)
-        dst = all_coords[graph.col]  # (M, 3)
-        weights = np.asarray(graph.data, dtype=np.float64)
-        weights = (weights - weights.min()) / (
-            weights.max() - weights.min() + 1e-9
-        )  # normalise 0→1
-        bucket_idx = np.clip((weights * N_BUCKETS).astype(int), 0, N_BUCKETS - 1)
-
-        edge_grp = VGroup()
-        for b in range(N_BUCKETS):
-            mask = bucket_idx == b
-            if not mask.any():
-                continue
-            pts = np.empty((4 * mask.sum(), 3), dtype=np.float64)
-            pts[0::4] = src[mask]
-            pts[1::4] = src[mask]
-            pts[2::4] = dst[mask]
-            pts[3::4] = dst[mask]
-            w = EDGE_WIDTH_MIN + (EDGE_WIDTH_MAX - EDGE_WIDTH_MIN) * (
-                b / (N_BUCKETS - 1)
-            )
-            mob = VMobject(
-                stroke_width=w, stroke_color=GRAY, fill_opacity=0, stroke_opacity=w
-            )
-            mob.set_points(pts)
-            edge_grp.add(mob)
-
-        edge_grp.set_z_index(-1)
-        self.play(
-            LaggedStart(
-                *[FadeIn(mob) for mob in edge_grp],
-                lag_ratio=0.5,
-                run_time=2.0,
-            )
-        )
-
-        self.wait()
-        self.marked_next_slide()
-
-        self.play(PMFadeOut(points))
-        self.play(
-            LaggedStart(*[FadeOut(fp) for fp in fade_points], lag_ratio=0.01),
-            run_time=0.5,
-        )
-        self.play(
-            edge_grp.animate.scale(2.75, about_point=(-3.0, -1.5, 0.0)),
-        )
-
-    def create_points(self, data: np.ndarray, axes) -> PMobject:
-        from manim.utils.color import color_to_rgba
-
-        coords = np.array(
-            [axes.c2p(*x) for x in data],
-            dtype=np.float64,
-        )
-        ts = np.linspace(0, 1, len(data))
-        rgbas = np.array(
-            [
-                color_to_rgba(colorcet.CET_C9[int(t * (len(colorcet.CET_C9) - 1))])
-                for t in ts
-            ]
-        )
-        pm = PMobject(stroke_width=self._stroke_width)
-        pm.add_points(coords, rgbas=rgbas)
-        return pm
-
-
 class LEtoFDExplanation(TIMCSlide):
     def construct(self):
 
@@ -466,3 +329,396 @@ class LEtoFDExplanation(TIMCSlide):
         )
         self.play(Transform(final_loss, new_loss))
         self.marked_next_slide()
+
+
+class EffectiveResistanceEmbeddingExplanation(TIMCSlide):
+    def construct(self):
+        title = Text("Effective Resistance Embedding", font_size=56)
+        self.play(Write(title))
+        self.marked_next_slide()
+        self.play(FadeOut(title))
+
+        # Show the formula for effective resistance in terms of the pseudoinverse of the Laplacian
+        formula = MathTex(
+            r"R_{\text{eff}}(i, j) = (e_i - e_j)^\top L^+ (e_i - e_j)",
+            font_size=56,
+        )
+        self.play(Write(formula))
+        self.marked_next_slide()
+
+        # Write the Laplacian as an eigendecomposition
+        laplacian = MathTex(
+            r"L = U \Sigma U^\top",
+            font_size=56,
+        ).next_to(formula, DOWN, buff=1.0)
+        self.play(Write(laplacian))
+        self.wait()
+        self.marked_next_slide()
+
+        # Substitute the eigendecomposition into the effective resistance formula
+        substituted = MathTex(
+            r"R_{\text{eff}}(i, j) = (e_i - e_j)^\top U \Sigma^+ U^\top (e_i - e_j)",
+            font_size=56,
+        ).move_to(formula.get_center())
+        self.play(Transform(formula, substituted), FadeOut(laplacian))
+        self.marked_next_slide()
+
+        # Define the embedding coordinates as the rows of U \Sigma^{+1/2}
+        embedding_def = MathTex(
+            r"y_i = \Sigma^{+1/2} U^\top e_i",
+            font_size=56,
+        ).next_to(formula, DOWN, buff=1.0)
+        self.play(Write(embedding_def))
+        self.wait()
+        self.marked_next_slide()
+
+        # Show that the squared distance between embedding coordinates equals the effective resistance
+        distance_formula = MathTex(
+            r"\|y_i - y_j\|^2 = (e_i - e_j)^\top U \Sigma^+ U^\top (e_i - e_j) = R_{\text{eff}}(i, j)",
+            font_size=56,
+        ).move_to(formula.get_center())
+        self.play(Transform(formula, distance_formula))
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(formula), embedding_def.animate.move_to(ORIGIN).scale(1.5))
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(embedding_def))
+
+        self.add_centered_text(
+            "We want the (scaled) eigenvectors corresponding to the smallest nonzero eigenvalues",
+            max_width=0.75,
+        )
+        self.wait()
+        self.marked_next_slide()
+
+
+import cv2
+
+
+# --- Custom Video Mobject Implementation ---
+class VideoMobject(ImageMobject):
+    def __init__(self, filename, **kwargs):
+        self.filename = filename
+
+        # 1. Open temporarily to grab dimensions
+        cap = cv2.VideoCapture(filename)
+        self.fps = cap.get(cv2.CAP_PROP_FPS)
+        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.duration = self.frame_count / self.fps
+
+        # Extract metadata dimensions
+        self.video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            raise ValueError(f"Could not read video file: {filename}")
+
+        # CRITICAL FIX 1: Convert first frame to RGBA (4 channels) to initialize the parent correctly
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        super().__init__(frame, **kwargs)
+
+        self.cap = None
+        self.current_time = 0.0
+        self.current_frame_idx = 0
+        self.prev_frame_no = -1
+
+        # Trigger updates on every timeline tick
+        self.add_updater(lambda m, dt: m.update_frame(dt))
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["cap"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.cap = None
+
+    def __deepcopy__(self, memo):
+        import copy
+
+        # Create a clean, uninitialized instance of VideoMobject
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Copy all properties over, but explicitly leave 'cap' out of it
+        for k, v in self.__dict__.items():
+            if k == "cap":
+                result.cap = None  # The copy will instantiate its own fresh stream when it renders
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
+        return result
+
+    def update_frame(self, dt):
+        if self.cap is None:
+            self.cap = cv2.VideoCapture(self.filename)
+            self.current_frame_idx = 0
+            self.prev_frame_no = -1
+
+        self.current_time += dt
+        frame_no = int(self.current_time * self.fps) % self.frame_count
+
+        # PERFORMANCE FIX: Skip frame processing entirely if the timeline tick
+        # hasn't shifted into a brand new video frame yet.
+        if frame_no == self.prev_frame_no:
+            return
+
+        # PERFORMANCE FIX: Avoid using the expensive set() operation unless
+        # the video loops or jumps out of sequential reading order.
+        if frame_no != self.current_frame_idx:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+
+        ret, frame = self.cap.read()
+
+        if ret:
+            self.current_frame_idx = frame_no + 1
+            self.prev_frame_no = frame_no
+
+            # CRITICAL FIX 2: Convert streaming frames to RGBA to match Manim's 4-channel matrix specs
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+
+            # Ensure the array structure precisely matches original specs
+            if (
+                frame.shape[1] != self.video_width
+                or frame.shape[0] != self.video_height
+            ):
+                frame = cv2.resize(frame, (self.video_width, self.video_height))
+
+            # Safely replace pixel matrix texture data
+            if hasattr(self, "set_pixel_array"):
+                self.set_pixel_array(frame)
+            else:
+                self.pixel_array = frame
+
+
+class HighDExampleUseCases(TIMCSlide):
+    def construct(self):
+
+        self.add_centered_text(
+            "Activation spaces of deep Neural Networks",
+            max_width=0.66,
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+
+        neural_video = VideoMobject("Neural network geometry.mp4")
+        neural_video.scale_to_fit_height(config.frame_height * 0.8)
+        # self.play(FadeIn(neural_video))
+        self.add(neural_video)
+        self.wait(neural_video.duration * 3)
+        self.marked_next_slide()
+
+        self.play(FadeOut(neural_video))
+        self.add_centered_text(
+            "Biology, especially single-cell genomics",
+            max_width=0.75,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+        sc_video = VideoMobject("zebrafish_scrna.mp4")
+        sc_video.scale_to_fit_height(config.frame_height * 0.66)
+        # self.play(FadeIn(sc_video))
+        self.add(sc_video)
+        self.wait(sc_video.duration * 2)
+        self.marked_next_slide()
+
+        self.play(FadeOut(sc_video))
+        self.wait()
+
+
+class GeneralizedBetaPrimeDistribution(TIMCSlide):
+    def construct(self):
+        self.add_centered_text("Generalized Beta Prime Distribution", max_width=0.66)
+        self.marked_next_slide()
+        self.clear_slide()
+
+        self.add_centered_text(
+            "A probability distribution of a ratio of two Gamma-distributed variables",
+            max_width=0.5,
+        )
+        self.marked_next_slide()
+        self.clear_slide()
+
+        ratio_text = MathTex(
+            r"\frac{\text{Distance (Gamma distributed)}}{\text{Scale (Gamma distributed)}}",
+            font_size=64,
+        )
+        self.play(Write(ratio_text))
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        # One colour per parameter, used both in the formula and its label
+        C_ALPHA = COLOR_CYCLE[0]  # blue
+        C_BETA = COLOR_CYCLE[3]  # pink/red
+        C_P = COLOR_CYCLE[2]  # green
+        C_Q = COLOR_CYCLE[1]  # orange
+
+        title = Text("Probability Density Function", font_size=48).to_edge(UP, buff=1.0)
+        # Every parameter occurrence is its own submobject for colouring and
+        # arrow targeting.  Index map:
+        #   [1] / [9]  = \alpha  (param list / numerator exponent)    → C_ALPHA
+        #   [3] / [16] = \beta   (param list / denominator exponent)  → C_BETA
+        #   [5] / [11] = p       (param list / denominator interior)  → C_P
+        #   [7] / [13] = q       (param list / denominator exponent)  → C_Q
+        # Note: r")^{" + r"q" + r"}" braces the isolated q submobject so that
+        # Manim's \special isolation markers don't appear between ^ and its
+        # argument, which would cause a LaTeX "Missing {" error.
+        formula = MathTex(
+            r"\Psi(x;\ ",
+            r"\alpha",
+            r",\ ",
+            r"\beta",
+            r",\ ",
+            r"p",
+            r",\ ",
+            r"q",
+            r") = \frac{1}{Z} \cdot \frac{x^{",
+            r"\alpha",
+            r" - 1}}{(1 + (x / ",
+            r"p",
+            r")^{",
+            r"q",
+            r"}",
+            r")^{",
+            r"\beta",
+            r"}}",
+            font_size=56,
+        )
+        for idx in (1, 9):
+            formula[idx].set_color(C_ALPHA)
+        for idx in (3, 16):
+            formula[idx].set_color(C_BETA)
+        for idx in (5, 11):
+            formula[idx].set_color(C_P)
+        for idx in (7, 13):
+            formula[idx].set_color(C_Q)
+
+        self.play(Write(title))
+        self.play(Write(formula))
+        self.wait()
+        self.marked_next_slide()
+
+        # Annotation labels, one per corner for maximum breathing room
+        alpha_label = (
+            Text(
+                "Controls left tail", font_size=26, color=C_ALPHA, stroke_color=C_ALPHA
+            )
+            .to_corner(UL, buff=2.0)
+            .shift(RIGHT * 2)
+        )
+        q_label = (
+            Text("Shape parameter", font_size=26, color=C_Q, stroke_color=C_Q)
+            .to_corner(UR, buff=1.75)
+            .shift(RIGHT)
+        )
+        p_label = (
+            Text("Scale parameter", font_size=26, color=C_P, stroke_color=C_P)
+            .to_corner(DL, buff=2.0)
+            .shift(RIGHT * 1.5)
+        )
+        beta_label = (
+            Text("Controls right tail", font_size=26, color=C_BETA, stroke_color=C_BETA)
+            .to_corner(DR, buff=0.5)
+            .shift(UP * 0.5)
+        )
+
+        # Curved arrows from each label to the relevant symbol in the formula body
+        alpha_arrow = CurvedArrow(
+            alpha_label.get_edge_center(RIGHT) + RIGHT * 0.125,
+            formula[9].get_center() + UL * 0.25,
+            angle=-PI / 5,
+            color=C_ALPHA,
+            stroke_width=4,
+            tip_length=0.2,
+        )
+        q_arrow = CurvedArrow(
+            q_label.get_center() + DOWN * 0.2,
+            formula[13].get_center() + UP * 0.25,
+            angle=PI / 5,
+            color=C_Q,
+            stroke_width=4,
+            tip_length=0.2,
+        )
+        p_arrow = CurvedArrow(
+            p_label.get_edge_center(RIGHT) + RIGHT * 0.125,
+            formula[11].get_bottom() + DL * 0.1,
+            angle=PI / 5,
+            color=C_P,
+            stroke_width=4,
+            tip_length=0.2,
+        )
+        beta_arrow = CurvedArrow(
+            beta_label.get_center() + UL * 0.2,
+            formula[16].get_bottom(),
+            angle=PI / 5,
+            color=C_BETA,
+            stroke_width=4,
+            tip_length=0.2,
+        )
+
+        self.play(
+            Write(alpha_label),
+            Create(alpha_arrow),
+            Write(q_label),
+            Create(q_arrow),
+            Write(p_label),
+            Create(p_arrow),
+            Write(beta_label),
+            Create(beta_arrow),
+        )
+
+        self.wait()
+        self.marked_next_slide()
+
+        # Place the new labels at their final positions up front so that
+        # ReplacementTransform morphs the text AND moves to the target in one step.
+        alpha_label_new = Text(
+            "Optional", font_size=26, color=C_ALPHA, stroke_color=C_ALPHA
+        ).next_to(alpha_arrow.get_start(), LEFT, buff=0.25)
+        q_label_new = Text(
+            "Shoulder sharpness", font_size=26, color=C_Q, stroke_color=C_Q
+        ).next_to(q_arrow.get_start(), UP, buff=0.1)
+        p_label_new = Text("Scale", font_size=26, color=C_P, stroke_color=C_P).next_to(
+            p_arrow.get_start(), LEFT, buff=0.25
+        )
+        beta_label_new = Text(
+            "Tail decay", font_size=26, color=C_BETA, stroke_color=C_BETA
+        ).next_to(beta_arrow.get_start(), DOWN, buff=0.1)
+        x_label_new = Paragraph(
+            "Shoulder width\n(via offset)",
+            font_size=26,
+            color=COLOR_CYCLE[4],
+            stroke_color=COLOR_CYCLE[4],
+            alignment="center",
+        ).move_to(formula[0].get_center() + DOWN * 1.5)
+        x_arrow = CurvedArrow(
+            x_label_new.get_top() + UP * 0.1,
+            formula[0].get_center() + DR * 0.25,
+            angle=-PI / 4,
+            color=COLOR_CYCLE[4],
+            stroke_width=4,
+            tip_length=0.2,
+        )
+        self.play(
+            ReplacementTransform(alpha_label, alpha_label_new),
+            ReplacementTransform(q_label, q_label_new),
+            ReplacementTransform(p_label, p_label_new),
+            ReplacementTransform(beta_label, beta_label_new),
+            Write(x_label_new),
+            Create(x_arrow),
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()

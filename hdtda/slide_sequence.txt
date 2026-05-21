@@ -3,7 +3,7 @@ VietorisRipsExplanation
 SimplicialHomologyExplanation
 PersistenceExplanation
 # HighDimIntro
-# HighDExampleUseCases
+HighDExampleUseCases
 SphereShellVolume
 ShadedNNDistribution
 PersistanceDiagramExpectations
@@ -21,7 +21,7 @@ DynamicPersistenceLissajousPCA
 ElectricResistanceGrid
 EffectiveResistanceCommute
 LissajousKnotPersistenceDiagramEffRes
-# From eff res to embedding
+EffectiveResistanceEmbeddingExplanation
 HardHighDLissajousEffRes
 HardHighDLissajousEffRes5D
 DynamicPersistenceLissajousEffResEmb
@@ -33,8 +33,10 @@ CompareLissajousPersistence
 HighDLissajousKnotUMAP2DWithEdges
 LEtoFDExplanation
 # FDComparisontoUMAP
+# GradientsOfLoss
+# ForceRequirements
 ForceParameterization
-# GeneralizedBetaPrime
+GeneralizedBetaPrime
 AnimatedUMAPOptimizationMNIST1
 AnimatedUMAPOptimizationMNIST3
 AnimatedUMAPOptimizationFashionMNIST1

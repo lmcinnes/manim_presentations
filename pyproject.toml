@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "manim>=0.19.1",
     "manim-slides>=4.1.0",
+    "opencv-python>=4.13.0.92",
     "pot>=0.9.6.post1",
 ]
 
