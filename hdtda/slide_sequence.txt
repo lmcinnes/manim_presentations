@@ -17,7 +17,7 @@ LissajousKnotPersistenceDiagram
 HardHighDLissajousPCA
 HardHighDLissajousPCA5D
 DynamicPersistenceLissajousPCA
-# Damrich paper example
+DamrichHDPersistentHomologyPaper
 ElectricResistanceGrid
 EffectiveResistanceCommute
 LissajousKnotPersistenceDiagramEffRes
@@ -29,12 +29,11 @@ UMAPExplanation
 HardHighDLissajousUMAP
 HardHighDLissajousUMAP5D
 CompareLissajousPersistence
-# TransitionToWhatWorks
+WhatMakesItWork
 HighDLissajousKnotUMAP2DWithEdges
 LEtoFDExplanation
-# FDComparisontoUMAP
-# GradientsOfLoss
-# ForceRequirements
+FDComparisontoUMAP
+GradientOfLoss
 ForceParameterization
 GeneralizedBetaPrime
 AnimatedUMAPOptimizationMNIST1

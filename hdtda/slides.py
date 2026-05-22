@@ -331,6 +331,97 @@ class LEtoFDExplanation(TIMCSlide):
         self.marked_next_slide()
 
 
+class FDComparisonToUMAP(TIMCSlide):
+    def construct(self):
+        self.add_centered_text(
+            "We can specialise this to approximate UMAP's loss function",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        fd_loss = MathTex(
+            r"\mathcal{L} = \frac{1}{2} \sum_{i,j} W_{ij} \varphi_{\text{attr}}(\|y_i - y_j\|) - \frac{\lambda}{2n} \sum_{i, j} \varphi_{\text{rep}}(\|y_i - y_j\|)",
+            font_size=48,
+        )
+        umapish_loss = MathTex(
+            r"\mathcal{L} = \frac{1}{2} \sum_{i,j} W_{ij} \log\left(\frac{1}{1 + a \|y_i - y_j\|^{2b}}\right) + \frac{\lambda}{2n} \sum_{i, j} \log\left(1 - \frac{1}{1 + a \|y_i - y_j\|^{2b}}\right)",
+            font_size=36,
+        )
+        self.play(Write(fd_loss))
+
+        set_forces = Tex(
+            r"\[\varphi_{\text{attr}}(r) = \log\left(\frac{1}{1 + a r^{2b}}\right)\]",
+            r"\[\varphi_{\text{rep}}(r) = \log\left(1 + \frac{1}{a r^{2b}}\right)\]",
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+            font_size=32,
+        ).next_to(fd_loss, DOWN, buff=0.5)
+
+        self.play(Write(set_forces))
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(set_forces), Transform(fd_loss, umapish_loss))
+        self.wait()
+        self.marked_next_slide()
+
+        set_forces_new = Tex(
+            r"\[q_{ij} = \frac{1}{1 + a \|y_i - y_j\|^{2b}}\]",
+            r"Assume $W_{ij} \approx 0$ for most $i,j$",
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+            font_size=36,
+        ).next_to(fd_loss, DOWN, buff=0.5)
+
+        umapish_loss_new = MathTex(
+            r"\mathcal{L} = \frac{1}{2} \sum_{i,j} W_{ij} \log\left(q_{ij}\right) + \frac{\lambda}{2n} \sum_{i, j} (1 - W_{ij})\log\left(1 - q_{ij}\right)",
+            font_size=36,
+        )
+
+        self.play(Write(set_forces_new))
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(set_forces_new), Transform(fd_loss, umapish_loss_new))
+        self.wait()
+        self.marked_next_slide()
+
+        set_forces_new2 = Tex(
+            r"Let $\lambda = n$\\",
+            r"Remove constants that don't affect optimization",
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+            font_size=36,
+        ).next_to(fd_loss, DOWN, buff=0.5)
+
+        umap_loss = MathTex(
+            r"\mathcal{L_{\text{UMAP}}} = \sum_{i,j} W_{ij} \log\left(q_{ij}\right) + \sum_{i, j} (1 - W_{ij})\log\left(1 - q_{ij}\right)",
+            font_size=36,
+        )
+
+        self.play(Write(set_forces_new2))
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(set_forces_new2), Transform(fd_loss, umap_loss))
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+
+        self.add_centered_text(
+            "We have a lot more flexibility with attraction and repulsion functions than just UMAP's specific choice",
+            max_width=0.66,
+            max_height=0.75,
+            font_size=48,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+
 class EffectiveResistanceEmbeddingExplanation(TIMCSlide):
     def construct(self):
         title = Text("Effective Resistance Embedding", font_size=56)
@@ -393,6 +484,7 @@ class EffectiveResistanceEmbeddingExplanation(TIMCSlide):
         )
         self.wait()
         self.marked_next_slide()
+        self.clear_slide()
 
 
 import cv2
@@ -549,11 +641,62 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         self.marked_next_slide()
         self.clear_slide()
 
-        ratio_text = MathTex(
-            r"\frac{\text{Distance (Gamma distributed)}}{\text{Scale (Gamma distributed)}}",
-            font_size=64,
+        # --- Ratio fraction: Text + Line so Marcellus font is used ---
+        RATIO_SIZE = 64
+        FRAC_BUFF = 0.12
+
+        dist_label = Text("Distance", font_size=RATIO_SIZE)
+        scale_label = Text("Scale", font_size=RATIO_SIZE)
+        bar_w_init = max(dist_label.width, scale_label.width) + 0.5
+        init_bar = Line(LEFT * bar_w_init / 2, RIGHT * bar_w_init / 2, stroke_width=2)
+        VGroup(dist_label, init_bar, scale_label).arrange(DOWN, buff=FRAC_BUFF).move_to(
+            ORIGIN
         )
-        self.play(Write(ratio_text))
+
+        self.play(FadeIn(dist_label), Create(init_bar), FadeIn(scale_label))
+        self.wait()
+        self.marked_next_slide()
+
+        # Build the full target layout to get precise final positions
+        dist_label_t = Text("Distance", font_size=RATIO_SIZE)
+        gamma_num = Text(
+            " (Gamma distributed)",
+            font_size=RATIO_SIZE,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        )
+        scale_label_t = Text("Scale", font_size=RATIO_SIZE)
+        gamma_den = Text(
+            " (Gamma distributed)",
+            font_size=RATIO_SIZE,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        )
+
+        num_row = VGroup(dist_label_t, gamma_num).arrange(RIGHT, buff=0.2)
+        den_row = VGroup(scale_label_t, gamma_den).arrange(RIGHT, buff=0.2)
+        bar_w_final = max(num_row.width, den_row.width) + 0.5
+        final_bar = Line(
+            LEFT * bar_w_final / 2, RIGHT * bar_w_final / 2, stroke_width=2
+        )
+        VGroup(num_row, final_bar, den_row).arrange(DOWN, buff=FRAC_BUFF).move_to(
+            ORIGIN
+        )
+
+        self.play(
+            LaggedStart(
+                AnimationGroup(
+                    ReplacementTransform(dist_label, dist_label_t),
+                    ReplacementTransform(scale_label, scale_label_t),
+                    Transform(init_bar, final_bar),
+                ),
+                AnimationGroup(
+                    Write(gamma_num),
+                    Write(gamma_den),
+                ),
+                lag_ratio=0.6,
+            )
+        )
         self.wait()
         self.marked_next_slide()
         self.clear_slide()
@@ -575,7 +718,7 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         # Manim's \special isolation markers don't appear between ^ and its
         # argument, which would cause a LaTeX "Missing {" error.
         formula = MathTex(
-            r"\Psi(x;\ ",
+            r"\psi(x;\ ",
             r"\alpha",
             r",\ ",
             r"\beta",
@@ -721,4 +864,259 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         self.wait()
         self.marked_next_slide()
 
+        self.clear_slide()
+
+
+class DamrichHDPersistentHomologyPaper(TIMCSlide):
+
+    def construct(self):
+
+        self.add_centered_text(
+            "Persistent Homology\nfor\nHigh-dimensional Data\nBased on Spectral Methods",
+            font_size=56,
+        )
+        self.wait()
+        authors = Text(
+            "Sebastian Damrich, Phillip Berens and Dmitry Kobak",
+            font_size=36,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        )
+        venue = Text(
+            "NeurIPS 2024",
+            font_size=28,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        )
+        citation = (VGroup(authors, venue).arrange(DOWN, buff=0.1)).to_edge(
+            DOWN, buff=0.5
+        )
+
+        self.play(Write(citation))
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+
+        poster = ImageMobject("damrich_poster.png").scale_to_fit_height(
+            config.frame_height * 0.8
+        )
+        self.play(FadeIn(poster), run_time=2)
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(FadeOut(poster))
+
+        main_text = Paragraph(
+            "Uses Effective Resistance\nDistance over kNN-graph",
+            font_size=56,
+            alignment="center",
+        )
+        sub_text = Text(
+            "(with von Luxburg correction)",
+            font_size=36,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        )
+        VGroup(main_text, sub_text).arrange(DOWN, buff=0.5).move_to(ORIGIN)
+        self.play(Write(main_text))
+        self.play(Write(sub_text))
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+
+
+class WhatMakesItWork(TIMCSlide):
+
+    def construct(self):
+
+        self.add_centered_text(
+            "What makes it work?\n\nWhy do other approaches fail?",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        text = self.add_centered_text(
+            "kNN graphs to focus on local structure?",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        new_text = Text(
+            "Path-distance fails!",
+            font_size=56,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        ).shift(DOWN * 0.5)
+        self.play(
+            LaggedStart(text.animate.shift(UP * 1.5), Write(new_text), lag_ratio=0.5)
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        self.add_centered_text('In high dimensions "noise" edges are common')
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+
+class GradientOfLoss(TIMCSlide):
+    def construct(self):
+
+        self.add_centered_text(
+            "Gradient of the loss function\nis a force field",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        # Show the formula for the loss function
+        loss_formula = MathTex(
+            r"\mathcal{L} = \frac{1}{2} \sum_{i,j} W_{ij} \varphi_{\text{attr}}(\|y_i - y_j\|) - \frac{\lambda}{2n} \sum_{i, j} \varphi_{\text{rep}}(\|y_i - y_j\|)",
+            font_size=48,
+        )
+        self.play(Write(loss_formula))
+        self.wait()
+        self.marked_next_slide()
+
+        # Show the gradient formula
+        grad_formula = MathTex(
+            r"\nabla_{y_i} \mathcal{L}",
+            r" = \sum_j W_{ij} ",
+            r"\varphi'_{\text{attr}}(\|y_i - y_j\|)",
+            r" \cdot ",
+            r"\frac{y_i - y_j}{\|y_i - y_j\|}",
+            r" - \frac{\lambda}{n} \sum_{j} ",
+            r"\varphi'_{\text{rep}}(\|y_i - y_j\|)",
+            r" \cdot ",
+            r"\frac{y_i - y_j}{\|y_i - y_j\|}",
+            font_size=36,
+        ).move_to(loss_formula.get_center())
+        self.play(FadeOut(loss_formula, shift=UP), FadeIn(grad_formula, shift=UP))
+        self.wait()
+        self.marked_next_slide()
+
+        attr = (
+            Text(
+                "Attraction force strength",
+                font_size=28,
+                color=COLOR_CYCLE[1],
+                stroke_color=COLOR_CYCLE[1],
+            )
+            .next_to(grad_formula[2], DOWN, buff=1.5)
+            .shift(LEFT * 0.5)
+        )
+        attr_arrow = CurvedArrow(
+            attr.get_edge_center(UP) + UP * 0.1,
+            grad_formula[2].get_edge_center(DOWN) + DOWN * 0.1,
+            color=COLOR_CYCLE[1],
+            stroke_width=4,
+            angle=PI / 5,
+            tip_length=0.15,
+        )
+        repr = (
+            Text(
+                "Repulsion force strength",
+                font_size=28,
+                color=COLOR_CYCLE[2],
+                stroke_color=COLOR_CYCLE[2],
+            )
+            .next_to(grad_formula[6], UP, buff=1.5)
+            .shift(RIGHT * 0.5)
+        )
+        repr_arrow = CurvedArrow(
+            repr.get_edge_center(DOWN) + DOWN * 0.1,
+            grad_formula[6].get_edge_center(UP) + UP * 0.1,
+            color=COLOR_CYCLE[2],
+            stroke_width=4,
+            angle=PI / 5,
+            tip_length=0.15,
+        )
+
+        self.play(
+            grad_formula[2].animate.set_color(COLOR_CYCLE[1]).set_stroke_width(8),
+            grad_formula[6].animate.set_color(COLOR_CYCLE[2]).set_stroke_width(8),
+            FadeIn(attr, scale=0.25),
+            FadeIn(repr, scale=0.25),
+            Create(attr_arrow),
+            Create(repr_arrow),
+        )
+        self.wait()
+
+        vec = Text(
+            "Direction of force",
+            font_size=28,
+            color=COLOR_CYCLE[3],
+            stroke_color=COLOR_CYCLE[3],
+        ).move_to(
+            (grad_formula[4].get_center() + grad_formula[8].get_center()) / 2
+            + DOWN * 2.5
+        )
+        vec_arrow1 = CurvedArrow(
+            vec.get_edge_center(LEFT) + LEFT * 0.1,
+            grad_formula[4].get_edge_center(DOWN) + DOWN * 0.25,
+            color=COLOR_CYCLE[3],
+            stroke_width=4,
+            angle=-PI / 5,
+            tip_length=0.15,
+        )
+        vec_arrow2 = CurvedArrow(
+            vec.get_edge_center(RIGHT) + RIGHT * 0.1,
+            grad_formula[8].get_edge_center(DOWN) + DOWN * 0.25,
+            color=COLOR_CYCLE[3],
+            stroke_width=4,
+            angle=PI / 5,
+            tip_length=0.15,
+        )
+
+        self.play(
+            grad_formula[4].animate.set_color(COLOR_CYCLE[3]).set_stroke_width(8),
+            grad_formula[8].animate.set_color(COLOR_CYCLE[3]).set_stroke_width(8),
+            FadeIn(vec, scale=0.25),
+            Create(vec_arrow1),
+            Create(vec_arrow2),
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        requirements = (
+            VGroup(
+                Tex(
+                    r"$\varphi'_{\text{attr}}(r) \to 0$ as $r \to \infty$", font_size=48
+                ),
+                Tex(
+                    r"$\varphi'_{\text{rep}}(r) \to 0$ as $r \to \infty$", font_size=48
+                ),
+                Tex(
+                    r"$|\varphi'_{\text{rep}}(r)| > |\varphi'_{\text{attr}}(r)|$ for large $r$",
+                    font_size=48,
+                ),
+            )
+            .arrange(DOWN, buff=0.5)
+            .move_to(ORIGIN)
+        )
+
+        self.play(Write(requirements))
+
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        self.add_centered_text(
+            "The relative shapes of the derivatives of the attraction and repulsion functions control the geometry of the embedding",
+            max_width=0.75,
+            max_height=0.66,
+            font_size=56,
+            t2c={"relative shapes": ACCENT_COLOR},
+        )
+
+        self.wait()
+        self.marked_next_slide()
         self.clear_slide()
