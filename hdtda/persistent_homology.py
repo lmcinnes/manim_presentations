@@ -24,7 +24,13 @@ from config import (
     colormap_color,
     create_logo,
 )
-from data_generation import CircleEmbedding, CurvyLoopEmbedding, TorusEmbedding
+from data_generation import (
+    CircleEmbedding,
+    CurvyLoopEmbedding,
+    TorusEmbedding,
+    effective_resistance_distance_embedding,
+    get_eff_res,
+)
 
 import numpy as np
 import colorcet
@@ -819,7 +825,8 @@ class VietorisRipsExplanation(TIMCSlide):
         )
 
         self.play(
-            LaggedStart(*[FadeIn(dot, scale=2.0) for dot in pt_dots], lag_ratio=0.05)
+            LaggedStart(*[FadeIn(dot, scale=2.0) for dot in pt_dots], lag_ratio=0.05),
+            run_time=4.5,
         )
 
         self.marked_next_slide()
@@ -918,7 +925,7 @@ class VietorisRipsExplanation(TIMCSlide):
 
         self.play(
             r_tracker.animate.set_value(max_r / 6),
-            run_time=4.0,
+            run_time=12.0,
             rate_func=rate_functions.ease_out_quart,
         )
 
@@ -926,7 +933,7 @@ class VietorisRipsExplanation(TIMCSlide):
 
         self.play(
             r_tracker.animate.set_value(max_r / 3),
-            run_time=6.0,
+            run_time=16.0,
             rate_func=rate_functions.ease_in_quad,
         )
 
@@ -1502,9 +1509,217 @@ class DynamicPersistenceLissajousPCA(TIMCSlide):
         # Create label group once at a fixed position anchored to the right of the axes.
         # All axes share the same x_length/y_length so this position never changes.
         _ref_axes = Axes(x_range=[0, 1], y_range=[0, 1], x_length=6, y_length=6)
-        self.current_dim_label = Text("Ambient Dimension", font_size=24).next_to(
+        self.current_dim_label = Text("PCA Dimension", font_size=24).next_to(
             _ref_axes, RIGHT, buff=0.5
         )
+        self.dim_label_value = DecimalNumber(
+            dimensions[0], num_decimal_places=0, font_size=48, color=ACCENT_COLOR
+        ).next_to(self.current_dim_label, DOWN, buff=0.25)
+
+        for i, dgms in enumerate(dgms_interp):
+            # Calculate max scale for this frame (excluding infinity)
+            finite_points = np.concatenate(
+                [d[np.isfinite(d).all(axis=1)] for d in dgms if len(d) > 0]
+            )
+            frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+
+            # --- CREATE NEW FRAME COMPONENTS ---
+            # Fixed tick steps (e.g., steps of 0.5 or 1.0 depending on scale)
+            tick_step = self.get_optimal_step(frame_max)
+
+            new_axes = Axes(
+                x_range=[0, axis_bounds[i], tick_step],
+                y_range=[0, axis_bounds[i], tick_step],
+                x_length=6,
+                y_length=6,
+                axis_config={
+                    "include_tip": False,
+                    "include_ticks": True,
+                    "numbers_to_exclude": [0],
+                },
+            ).add_coordinates()
+
+            new_diag = Line(
+                start=new_axes.c2p(0, 0),
+                end=new_axes.c2p(axis_bounds[i], axis_bounds[i]),
+                color=GRAY,
+                stroke_width=2,
+            )
+
+            # Infinity Line at the very top of the Y-axis
+            inf_y = new_axes.c2p(0, axis_bounds[i])[1]
+            new_inf_line = DashedLine(
+                start=[new_axes.c2p(0, 0)[0], inf_y, 0],
+                end=[new_axes.c2p(axis_bounds[i], 0)[0], inf_y, 0],
+                color=GRAY_C,
+            )
+
+            # Generate dot groups for H0, H1, H2
+            new_h_groups = self.get_homology_groups(dgms, new_axes, axis_bounds[i])
+
+            # --- ANIMATION LOGIC ---
+            if i == 0:
+                self.add(
+                    new_axes,
+                    new_diag,
+                    new_inf_line,
+                    self.current_dim_label,
+                    self.dim_label_value,
+                )
+                for group in new_h_groups:
+                    self.add(group)
+            else:
+                self.play(
+                    ReplacementTransform(self.current_axes, new_axes),
+                    ReplacementTransform(self.current_diag, new_diag),
+                    ReplacementTransform(self.current_inf_line, new_inf_line),
+                    ChangeDecimalToValue(self.dim_label_value, dimensions[i]),
+                    # Transform each homology group to its corresponding new version
+                    *[
+                        ReplacementTransform(self.current_h_groups[j], new_h_groups[j])
+                        for j in range(3)
+                    ],
+                    run_time=0.5,
+                )
+
+            # Update references
+            self.current_axes = new_axes
+            self.current_diag = new_diag
+            self.current_inf_line = new_inf_line
+            self.current_h_groups = new_h_groups
+            # self.current_dim_label_value = dim_label_value
+            self.wait(0.1)
+
+        self.marked_next_slide()
+
+        self.play(
+            FadeOut(self.current_axes),
+            FadeOut(self.current_diag),
+            FadeOut(self.current_inf_line),
+            FadeOut(self.current_dim_label),
+            FadeOut(self.dim_label_value),
+            *[FadeOut(group) for group in self.current_h_groups],
+        )
+
+    def get_homology_groups(self, dgms, axes, frame_max):
+        """Returns a list of VGroups, one for each homology dimension."""
+        groups = []
+        colors = [BLUE, ORANGE, GREEN]  # H0, H1, H2
+
+        for dim, dgm in enumerate(dgms):
+            vg = VGroup()
+            if len(dgm) == 0:
+                groups.append(vg)
+                continue
+
+            for point in dgm:
+                birth, death = point
+                # Handle Infinity Point (H0)
+                if not np.isfinite(death):
+                    dot = (
+                        Triangle(color=colors[dim])
+                        .scale(0.05)
+                        .move_to(axes.c2p(birth, frame_max))
+                    )
+                else:
+                    dot = Dot(
+                        point=axes.c2p(birth, death),
+                        color=colors[dim],
+                        radius=0.04,
+                        fill_opacity=0.7,
+                        stroke_width=0.5,
+                        stroke_color=WHITE,
+                        stroke_opacity=0.8,
+                    )
+                vg.add(dot)
+            groups.append(vg)
+
+        # Ensure we always return 3 groups even if H2 is empty
+        while len(groups) < 3:
+            groups.append(VGroup())
+
+        return groups
+
+    def get_optimal_step(self, max_val):
+        """Logic to keep ticks at 'round' intervals."""
+        if max_val < 10:
+            return 1.0
+        if max_val < 20:
+            return 2.0
+        if max_val < 50:
+            return 5.0
+        if max_val < 100:
+            return 10.0
+        return 20.0
+
+
+class DynamicPersistenceLissajousEffResEmb(TIMCSlide):
+
+    _n_samples: int = 2000
+    _seed: int = 42
+    _generator_kwargs: dict = dict(
+        target_dim=512,
+        radius=2.0,
+        n_planes=7,
+        noise=0.01,
+        noise_hd=0.25,
+        dataset_type="highdim_loop",
+    )
+
+    def construct(self):
+        print("Starting DynamicPersistenceLissajousEffResEmb construction...")
+        import sys
+
+        sys.stdout.flush()
+        # 1. Setup Data
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+
+        dimensions = np.arange(2, 32)
+        # dimensions = np.round(np.linspace(2, np.cbrt(512), 256) ** 3).astype(np.int32)
+        datasets = []
+        diagrams = []
+        for d in dimensions:
+            print(f"Computing EffResEmb + PD for dimension {d}...")
+            sys.stdout.flush()
+
+            X_pca = effective_resistance_distance_embedding(X_embedded, target_dim=d)
+            datasets.append(X_pca)
+            dgms = ripser(X_pca, maxdim=1)["dgms"]
+            diagrams.append(dgms)
+
+        # print("Creating interpolated sequence...")
+        # dgms_interp, dimensions = create_interpolated_sequence(
+        #     diagrams, n_interp=2, min_dim=2, max_dim=512
+        # )
+        # print(len(dgms_interp[0]))
+        # print(f"Total frames: {len(dgms_interp)}")
+        dgms_interp = diagrams
+        axis_bounds = []
+        current_max = 0
+        for dgms in dgms_interp:
+            finite_points = np.concatenate(
+                [d[np.isfinite(d).all(axis=1)] for d in dgms if len(d) > 0]
+            )
+            frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+            if frame_max > current_max:
+                current_max = frame_max
+                axis_bounds.append(frame_max)
+            else:
+                axis_bounds.append(current_max)
+
+        # Track the groups across frames
+        self.current_h_groups = [VGroup() for _ in range(3)]  # H0, H1, H2
+        self.current_axes = None
+        self.current_diag = None
+        self.current_inf_line = None
+
+        # Create label group once at a fixed position anchored to the right of the axes.
+        # All axes share the same x_length/y_length so this position never changes.
+        _ref_axes = Axes(x_range=[0, 1], y_range=[0, 1], x_length=6, y_length=6)
+        self.current_dim_label = Text(
+            "Effective\nResistance\nEmbedding\nDimension", font_size=24
+        ).next_to(_ref_axes, RIGHT, buff=0.5)
         self.dim_label_value = DecimalNumber(
             dimensions[0], num_decimal_places=0, font_size=48, color=ACCENT_COLOR
         ).next_to(self.current_dim_label, DOWN, buff=0.25)
@@ -1845,3 +2060,468 @@ class CompareLissajousPersistence(TIMCSlide):
         if max_val < 3:
             return 0.5
         return 1.0
+
+
+_HIGH_D_KWARGS = dict(
+    target_dim=512,
+    radius=2.0,
+    n_planes=5,
+    noise=0.01,
+    noise_hd=0.175,
+    dataset_type="highdim_loop",
+)
+
+_HARD_HIGH_D_KWARGS = dict(
+    target_dim=512,
+    radius=2.0,
+    n_planes=7,
+    noise=0.01,
+    noise_hd=0.25,
+    dataset_type="highdim_loop",
+)
+
+
+class LissajousKnotPersistenceDiagram(TIMCSlide):  # type: Scene
+
+    _n_samples: int = 2000
+    _seed: int = 42
+    _generator_kwargs: dict = _HIGH_D_KWARGS
+
+    def construct(self):
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+        diagram = ripser(X_embedded, maxdim=1)["dgms"]
+
+        finite_points = np.concatenate(
+            [d[np.isfinite(d).all(axis=1)] for d in diagram if len(d) > 0]
+        )
+        frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+
+        # --- CREATE NEW FRAME COMPONENTS ---
+        # Fixed tick steps (e.g., steps of 0.5 or 1.0 depending on scale)
+        tick_step = self.get_optimal_step(frame_max)
+
+        self.current_axes = Axes(
+            x_range=[0, frame_max, tick_step],
+            y_range=[0, frame_max, tick_step],
+            x_length=6,
+            y_length=6,
+            axis_config={
+                "include_tip": False,
+                "include_ticks": True,
+                "numbers_to_exclude": [0],
+            },
+        ).add_coordinates()
+
+        self.current_diag = Line(
+            start=self.current_axes.c2p(0, 0),
+            end=self.current_axes.c2p(frame_max, frame_max),
+            color=GRAY,
+            stroke_width=2,
+        )
+
+        # Infinity Line at the very top of the Y-axis
+        inf_y = self.current_axes.c2p(0, frame_max)[1]
+        self.current_inf_line = DashedLine(
+            start=[self.current_axes.c2p(0, 0)[0], inf_y, 0],
+            end=[self.current_axes.c2p(frame_max, 0)[0], inf_y, 0],
+            color=GRAY_C,
+        )
+
+        # Generate dot groups for H0, H1, H2
+        self.current_h_groups = self.get_homology_groups(
+            diagram, self.current_axes, frame_max
+        )
+        self.play(
+            Create(self.current_axes),
+            Create(self.current_diag),
+            Create(self.current_inf_line),
+            run_time=1.0,
+        )
+        for group in self.current_h_groups:
+            if len(group) > 0:
+                self.play(
+                    LaggedStart(
+                        *[FadeIn(dot, scale=1.5) for dot in group], lag_ratio=0.05
+                    ),
+                    run_time=0.5,
+                )
+            # self.play(Create(group))
+
+        self.marked_next_slide()
+
+        reduced_embedding = sklearn.decomposition.PCA(n_components=5).fit_transform(
+            X_embedded
+        )
+        reduced_dgms = ripser(reduced_embedding, maxdim=1)["dgms"]
+        finite_points = np.concatenate(
+            [d[np.isfinite(d).all(axis=1)] for d in reduced_dgms if len(d) > 0]
+        )
+        new_frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+        reduced_h_groups = self.get_homology_groups(
+            reduced_dgms, self.current_axes, new_frame_max
+        )
+
+        text = Paragraph(
+            "PCA-Reduced\nAmbient Dimension",
+            font_size=24,
+            color=ACCENT_COLOR,
+            alignment="center",
+        ).next_to(self.current_axes, RIGHT, buff=0.25)
+        label_value = DecimalNumber(
+            5, num_decimal_places=0, font_size=48, color=ACCENT_COLOR
+        ).next_to(text, DOWN, buff=0.25)
+
+        self.play(
+            ReplacementTransform(self.current_h_groups[1], reduced_h_groups[1]),
+            ReplacementTransform(self.current_h_groups[0], reduced_h_groups[0]),
+            Write(text),
+            Write(label_value),
+        )
+
+        self.marked_next_slide()
+
+        new_axes = Axes(
+            x_range=[0, new_frame_max, tick_step],
+            y_range=[0, new_frame_max, tick_step],
+            x_length=6,
+            y_length=6,
+            axis_config={
+                "include_tip": False,
+                "include_ticks": True,
+                "numbers_to_exclude": [0],
+            },
+        ).add_coordinates()
+
+        new_diag = Line(
+            start=new_axes.c2p(0, 0),
+            end=new_axes.c2p(new_frame_max, new_frame_max),
+            color=GRAY,
+            stroke_width=2,
+        )
+
+        # Infinity Line at the very top of the Y-axis
+        inf_y = new_axes.c2p(0, new_frame_max)[1]
+        new_inf_line = DashedLine(
+            start=[new_axes.c2p(0, 0)[0], inf_y, 0],
+            end=[new_axes.c2p(new_frame_max, 0)[0], inf_y, 0],
+            color=GRAY_C,
+        )
+
+        new_h_groups = self.get_homology_groups(reduced_dgms, new_axes, new_frame_max)
+
+        self.play(
+            ReplacementTransform(self.current_axes, new_axes),
+            ReplacementTransform(self.current_diag, new_diag),
+            ReplacementTransform(self.current_inf_line, new_inf_line),
+            *[
+                ReplacementTransform(reduced_h_groups[j], new_h_groups[j])
+                for j in range(3)
+            ],
+            run_time=0.5,
+        )
+
+        self.wait()
+
+        h1_nonnoise_features = [
+            dot
+            for dot in new_h_groups[1]
+            if dot.get_center()[1] > new_axes.c2p(0.5, 1.0)[1]
+            and dot.get_center()[0] < new_axes.c2p(1.0, 1.0)[0]
+        ]
+        for h1_nonnoise_feature in h1_nonnoise_features:
+            self.play(
+                # Create(
+                #     Circle(color=HIGHLIGHT_COLOR, stroke_width=3).surround(
+                #         h1_nonnoise_feature,
+                #         buffer_factor=3,
+                #     )
+                # )
+                Flash(
+                    h1_nonnoise_feature,
+                    color=HIGHLIGHT_COLOR,
+                    flash_radius=0.2,
+                ),
+            )
+
+    def get_homology_groups(self, dgms, axes, frame_max):
+        """Returns a list of VGroups, one for each homology dimension."""
+        groups = []
+        colors = [BLUE, ORANGE, GREEN]  # H0, H1, H2
+
+        for dim, dgm in enumerate(dgms):
+            vg = VGroup()
+            if len(dgm) == 0:
+                groups.append(vg)
+                continue
+
+            for point in dgm:
+                birth, death = point
+                # Handle Infinity Point (H0)
+                if not np.isfinite(death):
+                    dot = (
+                        Triangle(color=colors[dim])
+                        .scale(0.05)
+                        .move_to(axes.c2p(birth, frame_max))
+                    )
+                else:
+                    dot = Dot(
+                        point=axes.c2p(birth, death),
+                        color=colors[dim],
+                        radius=0.04,
+                        fill_opacity=0.7,
+                        stroke_width=0.5,
+                        stroke_color=WHITE,
+                        stroke_opacity=0.8,
+                    )
+                vg.add(dot)
+            groups.append(vg)
+
+        # Ensure we always return 3 groups even if H2 is empty
+        while len(groups) < 3:
+            groups.append(VGroup())
+
+        return groups
+
+    def get_optimal_step(self, max_val):
+        """Logic to keep ticks at 'round' intervals."""
+        if max_val < 0.05:
+            return 0.01
+        if max_val < 0.1:
+            return 0.02
+        if max_val < 0.5:
+            return 0.1
+        if max_val < 1:
+            return 0.2
+        if max_val < 10:
+            return 1.0
+        if max_val < 20:
+            return 2.0
+        if max_val < 50:
+            return 5.0
+        if max_val < 100:
+            return 10.0
+        return 20.0
+
+
+class LissajousKnotPersistenceDiagramEffRes(TIMCSlide):  # type: Scene
+
+    _n_samples: int = 2000
+    _seed: int = 42
+    _generator_kwargs: dict = _HIGH_D_KWARGS
+
+    def construct(self):
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+        diagram = ripser(X_embedded, maxdim=1)["dgms"]
+
+        finite_points = np.concatenate(
+            [d[np.isfinite(d).all(axis=1)] for d in diagram if len(d) > 0]
+        )
+        frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+
+        # --- CREATE NEW FRAME COMPONENTS ---
+        # Fixed tick steps (e.g., steps of 0.5 or 1.0 depending on scale)
+        tick_step = self.get_optimal_step(frame_max)
+
+        self.current_axes = Axes(
+            x_range=[0, frame_max, tick_step],
+            y_range=[0, frame_max, tick_step],
+            x_length=6,
+            y_length=6,
+            axis_config={
+                "include_tip": False,
+                "include_ticks": True,
+                "numbers_to_exclude": [0],
+            },
+        ).add_coordinates()
+
+        self.current_diag = Line(
+            start=self.current_axes.c2p(0, 0),
+            end=self.current_axes.c2p(frame_max, frame_max),
+            color=GRAY,
+            stroke_width=2,
+        )
+
+        # Infinity Line at the very top of the Y-axis
+        inf_y = self.current_axes.c2p(0, frame_max)[1]
+        self.current_inf_line = DashedLine(
+            start=[self.current_axes.c2p(0, 0)[0], inf_y, 0],
+            end=[self.current_axes.c2p(frame_max, 0)[0], inf_y, 0],
+            color=GRAY_C,
+        )
+
+        # Generate dot groups for H0, H1, H2
+        self.current_h_groups = self.get_homology_groups(
+            diagram, self.current_axes, frame_max
+        )
+        self.play(
+            Create(self.current_axes),
+            Create(self.current_diag),
+            Create(self.current_inf_line),
+            run_time=1.0,
+        )
+        for group in self.current_h_groups:
+            if len(group) > 0:
+                self.play(
+                    LaggedStart(
+                        *[FadeIn(dot, scale=1.5) for dot in group], lag_ratio=0.05
+                    ),
+                    run_time=0.5,
+                )
+            # self.play(Create(group))
+
+        self.marked_next_slide()
+
+        eff_res_dmat = get_eff_res(X_embedded, k=15)
+        np.fill_diagonal(eff_res_dmat, 0)  # Ensure zero distance on diagonal
+        eff_res_dmat = np.clip(eff_res_dmat, 0, None) * 200.0  # Avoid zeros for ripser
+        reduced_dgms = ripser(eff_res_dmat, maxdim=1, distance_matrix=True)["dgms"]
+        finite_points = np.concatenate(
+            [d[np.isfinite(d).all(axis=1)] for d in reduced_dgms if len(d) > 0]
+        )
+        new_frame_max = np.max(finite_points) * 1.1 if finite_points.size > 0 else 1.0
+        reduced_h_groups = self.get_homology_groups(
+            reduced_dgms, self.current_axes, new_frame_max
+        )
+
+        text = Paragraph(
+            "Effective\nResistance\nDistance",
+            font_size=24,
+            color=ACCENT_COLOR,
+            alignment="center",
+        ).next_to(self.current_axes, RIGHT, buff=0.25)
+        # label_value = DecimalNumber(
+        #     5, num_decimal_places=0, font_size=48, color=ACCENT_COLOR
+        # ).next_to(text, DOWN, buff=0.25)
+
+        self.play(
+            ReplacementTransform(self.current_h_groups[1], reduced_h_groups[1]),
+            ReplacementTransform(self.current_h_groups[0], reduced_h_groups[0]),
+            Write(text),
+            # Write(label_value),
+        )
+
+        self.marked_next_slide()
+
+        new_axes = Axes(
+            x_range=[0, new_frame_max, tick_step],
+            y_range=[0, new_frame_max, tick_step],
+            x_length=6,
+            y_length=6,
+            axis_config={
+                "include_tip": False,
+                "include_ticks": True,
+                "numbers_to_exclude": [0],
+            },
+        ).add_coordinates()
+
+        new_diag = Line(
+            start=new_axes.c2p(0, 0),
+            end=new_axes.c2p(new_frame_max, new_frame_max),
+            color=GRAY,
+            stroke_width=2,
+        )
+
+        # Infinity Line at the very top of the Y-axis
+        inf_y = new_axes.c2p(0, new_frame_max)[1]
+        new_inf_line = DashedLine(
+            start=[new_axes.c2p(0, 0)[0], inf_y, 0],
+            end=[new_axes.c2p(new_frame_max, 0)[0], inf_y, 0],
+            color=GRAY_C,
+        )
+
+        new_h_groups = self.get_homology_groups(reduced_dgms, new_axes, new_frame_max)
+
+        self.play(
+            ReplacementTransform(self.current_axes, new_axes),
+            ReplacementTransform(self.current_diag, new_diag),
+            ReplacementTransform(self.current_inf_line, new_inf_line),
+            *[
+                ReplacementTransform(reduced_h_groups[j], new_h_groups[j])
+                for j in range(3)
+            ],
+            run_time=0.5,
+        )
+
+        self.wait()
+
+        h1_nonnoise_features = [
+            dot
+            for dot in new_h_groups[1]
+            if dot.get_center()[1] > new_axes.c2p(0.5, 1.5)[1]
+            and dot.get_center()[0] < new_axes.c2p(1.0, 1.0)[0]
+        ]
+        for h1_nonnoise_feature in h1_nonnoise_features:
+            self.play(
+                # Create(
+                #     Circle(color=HIGHLIGHT_COLOR, stroke_width=3).surround(
+                #         h1_nonnoise_feature,
+                #         buffer_factor=3,
+                #     )
+                # )
+                Flash(
+                    h1_nonnoise_feature,
+                    color=HIGHLIGHT_COLOR,
+                    flash_radius=0.2,
+                ),
+            )
+
+    def get_homology_groups(self, dgms, axes, frame_max):
+        """Returns a list of VGroups, one for each homology dimension."""
+        groups = []
+        colors = [BLUE, ORANGE, GREEN]  # H0, H1, H2
+
+        for dim, dgm in enumerate(dgms):
+            vg = VGroup()
+            if len(dgm) == 0:
+                groups.append(vg)
+                continue
+
+            for point in dgm:
+                birth, death = point
+                # Handle Infinity Point (H0)
+                if not np.isfinite(death):
+                    dot = (
+                        Triangle(color=colors[dim])
+                        .scale(0.05)
+                        .move_to(axes.c2p(birth, frame_max))
+                    )
+                else:
+                    dot = Dot(
+                        point=axes.c2p(birth, death),
+                        color=colors[dim],
+                        radius=0.04,
+                        fill_opacity=0.7,
+                        stroke_width=0.5,
+                        stroke_color=WHITE,
+                        stroke_opacity=0.8,
+                    )
+                vg.add(dot)
+            groups.append(vg)
+
+        # Ensure we always return 3 groups even if H2 is empty
+        while len(groups) < 3:
+            groups.append(VGroup())
+
+        return groups
+
+    def get_optimal_step(self, max_val):
+        """Logic to keep ticks at 'round' intervals."""
+        if max_val < 0.05:
+            return 0.01
+        if max_val < 0.1:
+            return 0.02
+        if max_val < 0.5:
+            return 0.1
+        if max_val < 1:
+            return 0.2
+        if max_val < 10:
+            return 1.0
+        if max_val < 20:
+            return 2.0
+        if max_val < 50:
+            return 5.0
+        if max_val < 100:
+            return 10.0
+        return 20.0

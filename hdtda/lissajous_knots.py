@@ -877,3 +877,140 @@ class LissajousKnotIntroduction(ThreeDTIMCSlide):
             LaggedStart(*[Create(p[1], run_time=2) for p in all_plots], lag_ratio=0.5)
         )
         self.wait(1)
+
+
+class HighDLissajousKnotUMAP2DWithEdges(TIMCSlide):
+
+    _n_samples = 2000
+    _seed = 42
+    _generator_kwargs: dict = dict(
+        target_dim=512,
+        radius=2.0,
+        n_planes=5,
+        noise=0.01,
+        noise_hd=0.175,
+        dataset_type="highdim_loop",
+    )
+    _stroke_width = 16
+
+    def construct(self):
+        import umap
+
+        generator = CurvyLoopEmbedding(n_samples=self._n_samples, seed=self._seed)
+        _, X_embedded, _ = generator.generate_dataset(**self._generator_kwargs)
+        mapper = umap.UMAP(
+            random_state=42,
+            n_components=3,
+            n_neighbors=16,
+            repulsion_strength=0.5,
+            n_epochs=500,
+        ).fit(X_embedded)
+        embedding_2d = _normalize_to_axes(
+            np.ascontiguousarray(mapper.embedding_[:, [0, 2]])
+        )
+
+        fade_point_indices = np.random.RandomState(42).choice(
+            self._n_samples, size=int(self._n_samples * 0.30), replace=False
+        )
+        fade_point_embedding_2d = embedding_2d[fade_point_indices]
+        fade_point_colors = [
+            colorcet.CET_C9[int(t / self._n_samples * (len(colorcet.CET_C9) - 1))]
+            for t in fade_point_indices
+        ]
+
+        axes = Axes(x_range=[-2.0, 2.0], y_range=[-2.0, 2.0])
+        points = self.create_points(embedding_2d, axes)
+        fade_points = [
+            Dot(axes.c2p(*pt), radius=0.03, color=c)
+            for pt, c in zip(fade_point_embedding_2d, fade_point_colors)
+        ]
+
+        self.camera.get_thickening_nudges = _types.MethodType(
+            lambda cam, t: _make_circular_nudges(t), self.camera
+        )
+
+        self.play(
+            LaggedStart(*[FadeIn(fp) for fp in fade_points], lag_ratio=0.01),
+            run_time=1.0,
+        )
+        self.play(PMFadeIn(points))
+
+        self.wait()
+        self.marked_next_slide()
+
+        # Build one VMobject per width bucket.
+        # Cairo sets line width once per draw call, so true per-segment widths
+        # require separate objects. Bucketing keeps the count to O(N_BUCKETS)
+        # instead of O(N_edges) while still conveying edge strength visually.
+        # Each edge A→B is packed as the degenerate cubic bezier [A, A, B, B].
+        N_BUCKETS = 64
+        EDGE_WIDTH_MIN = 0.01
+        EDGE_WIDTH_MAX = 1.0
+
+        graph = mapper.graph_.tocoo()
+        all_coords = np.array([axes.c2p(*pt) for pt in embedding_2d], dtype=np.float64)
+        src = all_coords[graph.row]  # (M, 3)
+        dst = all_coords[graph.col]  # (M, 3)
+        weights = np.asarray(graph.data, dtype=np.float64)
+        weights = (weights - weights.min()) / (
+            weights.max() - weights.min() + 1e-9
+        )  # normalise 0→1
+        bucket_idx = np.clip((weights * N_BUCKETS).astype(int), 0, N_BUCKETS - 1)
+
+        edge_grp = VGroup()
+        for b in range(N_BUCKETS):
+            mask = bucket_idx == b
+            if not mask.any():
+                continue
+            pts = np.empty((4 * mask.sum(), 3), dtype=np.float64)
+            pts[0::4] = src[mask]
+            pts[1::4] = src[mask]
+            pts[2::4] = dst[mask]
+            pts[3::4] = dst[mask]
+            w = EDGE_WIDTH_MIN + (EDGE_WIDTH_MAX - EDGE_WIDTH_MIN) * (
+                b / (N_BUCKETS - 1)
+            )
+            mob = VMobject(
+                stroke_width=w, stroke_color=GRAY, fill_opacity=0, stroke_opacity=w
+            )
+            mob.set_points(pts)
+            edge_grp.add(mob)
+
+        edge_grp.set_z_index(-1)
+        self.play(
+            LaggedStart(
+                *[FadeIn(mob) for mob in edge_grp],
+                lag_ratio=0.5,
+                run_time=2.0,
+            )
+        )
+
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(PMFadeOut(points))
+        self.play(
+            LaggedStart(*[FadeOut(fp) for fp in fade_points], lag_ratio=0.01),
+            run_time=0.5,
+        )
+        self.play(
+            edge_grp.animate.scale(2.75, about_point=(-3.0, -1.5, 0.0)),
+        )
+
+    def create_points(self, data: np.ndarray, axes) -> PMobject:
+        from manim.utils.color import color_to_rgba
+
+        coords = np.array(
+            [axes.c2p(*x) for x in data],
+            dtype=np.float64,
+        )
+        ts = np.linspace(0, 1, len(data))
+        rgbas = np.array(
+            [
+                color_to_rgba(colorcet.CET_C9[int(t * (len(colorcet.CET_C9) - 1))])
+                for t in ts
+            ]
+        )
+        pm = PMobject(stroke_width=self._stroke_width)
+        pm.add_points(coords, rgbas=rgbas)
+        return pm
