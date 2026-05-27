@@ -419,3 +419,455 @@ class ShadedNNDistribution(TIMCSlide):
                 )
 
         self.wait()
+
+
+import cv2
+
+
+# --- Custom Video Mobject Implementation ---
+class VideoMobject(ImageMobject):
+    def __init__(self, filename, **kwargs):
+        self.filename = filename
+
+        # 1. Open temporarily to grab dimensions
+        cap = cv2.VideoCapture(filename)
+        self.fps = cap.get(cv2.CAP_PROP_FPS)
+        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.duration = self.frame_count / self.fps
+
+        # Extract metadata dimensions
+        self.video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            raise ValueError(f"Could not read video file: {filename}")
+
+        # CRITICAL FIX 1: Convert first frame to RGBA (4 channels) to initialize the parent correctly
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        super().__init__(frame, **kwargs)
+
+        self.cap = None
+        self.current_time = 0.0
+        self.current_frame_idx = 0
+        self.prev_frame_no = -1
+
+        # Trigger updates on every timeline tick
+        self.add_updater(lambda m, dt: m.update_frame(dt))
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["cap"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.cap = None
+
+    def __deepcopy__(self, memo):
+        import copy
+
+        # Create a clean, uninitialized instance of VideoMobject
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Copy all properties over, but explicitly leave 'cap' out of it
+        for k, v in self.__dict__.items():
+            if k == "cap":
+                result.cap = None  # The copy will instantiate its own fresh stream when it renders
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
+        return result
+
+    def update_frame(self, dt):
+        if self.cap is None:
+            self.cap = cv2.VideoCapture(self.filename)
+            self.current_frame_idx = 0
+            self.prev_frame_no = -1
+
+        self.current_time += dt
+        frame_no = int(self.current_time * self.fps) % self.frame_count
+
+        # PERFORMANCE FIX: Skip frame processing entirely if the timeline tick
+        # hasn't shifted into a brand new video frame yet.
+        if frame_no == self.prev_frame_no:
+            return
+
+        # PERFORMANCE FIX: Avoid using the expensive set() operation unless
+        # the video loops or jumps out of sequential reading order.
+        if frame_no != self.current_frame_idx:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+
+        ret, frame = self.cap.read()
+
+        if ret:
+            self.current_frame_idx = frame_no + 1
+            self.prev_frame_no = frame_no
+
+            # CRITICAL FIX 2: Convert streaming frames to RGBA to match Manim's 4-channel matrix specs
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+
+            # Ensure the array structure precisely matches original specs
+            if (
+                frame.shape[1] != self.video_width
+                or frame.shape[0] != self.video_height
+            ):
+                frame = cv2.resize(frame, (self.video_width, self.video_height))
+
+            # Safely replace pixel matrix texture data
+            if hasattr(self, "set_pixel_array"):
+                self.set_pixel_array(frame)
+            else:
+                self.pixel_array = frame
+
+
+class HighDExampleUseCases(TIMCSlide):
+    def construct(self):
+
+        self.add_centered_text(
+            "Activation spaces of deep Neural Networks",
+            max_width=0.66,
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+
+        neural_video = VideoMobject("Neural network geometry.mp4")
+        neural_video.scale_to_fit_height(config.frame_height * 0.8)
+        # self.play(FadeIn(neural_video))
+        self.add(neural_video)
+        self.wait(neural_video.duration * 3)
+        self.marked_next_slide()
+
+        self.play(FadeOut(neural_video))
+        self.add_centered_text(
+            "Biology, especially single-cell genomics",
+            max_width=0.75,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+        sc_video = VideoMobject("zebrafish_scrna.mp4")
+        sc_video.scale_to_fit_height(config.frame_height * 0.66)
+        # self.play(FadeIn(sc_video))
+        self.add(sc_video)
+        self.wait(sc_video.duration * 2)
+        self.marked_next_slide()
+
+        self.play(FadeOut(sc_video))
+        self.wait()
+
+
+def _make_vr_demo_cloud(
+    n_clusters: int = 8,
+    circle_radius: float = 1.0,
+    rect_min_side: float = 0.35,
+    rect_max_side: float = 0.55,
+    n_connectors: int = 10,
+    seed: int = 13,
+    tilt_phi: float = np.pi / 5,
+    tilt_theta: float = np.pi / 4,
+    noise_xy_scale: float = 0.05,
+    noise_z_scale: float = 0.15,
+) -> np.ndarray:
+    """
+    Build a 3-D point cloud that looks like a noisily sampled circle but has
+    controlled topological properties:
+
+    * One dominant H₁ loop (the circle) with long persistence.
+    * Several short-persistence H₁ loops, one per rectangular cluster
+      (points near the diagonal of the persistence diagram).
+    * H₀ components that merge as the filtration grows.
+
+    The circle lies in a tilted plane inside ℝ³, controlled by ``tilt_phi``
+    (polar tilt from the z-axis) and ``tilt_theta`` (azimuthal direction of
+    the tilt).  Anisotropic noise is applied in the local circle frame before
+    tilting: ``noise_xy_scale`` adds in-plane scatter, while ``noise_z_scale``
+    (larger by default) lifts points off the plane to give the cloud clear
+    3-D thickness.
+
+    Construction
+    ------------
+    ``n_clusters`` small 2×2 rectangular grids of points are placed around a
+    circle of ``circle_radius``.  Each rectangle has random side lengths drawn
+    from [rect_min_side, rect_max_side] and a random rotation.  An additional
+    ``n_connectors`` points are scattered near the circle arc between random
+    adjacent cluster pairs to ensure clean connectivity between clusters.
+
+    Topological rationale for the rectangles
+    -----------------------------------------
+    For a rectangle with sides w ≤ h the VR H₁ loop is born at r = h and dies
+    at r = √(w²+h²).  With small sides (≪ inter-cluster gap) the persistence
+    √(w²+h²) − h  is short, so these features sit close to the diagonal.
+    """
+    rng = np.random.RandomState(seed)
+    points = []
+
+    # Cluster centres: equally-spaced angles with small random jitter
+    base_angles = np.linspace(0, 2 * np.pi, n_clusters, endpoint=False)
+    cluster_angles = base_angles + rng.uniform(-0.15, 0.15, n_clusters)
+
+    for angle in cluster_angles:
+        cx = circle_radius * np.cos(angle)
+        cy = circle_radius * np.sin(angle)
+
+        w = rng.uniform(rect_min_side, rect_max_side)
+        h = rng.uniform(rect_min_side, rect_max_side)
+
+        rot = rng.uniform(0, 2 * np.pi)
+        cos_r, sin_r = np.cos(rot), np.sin(rot)
+        R_mat = np.array([[cos_r, -sin_r], [sin_r, cos_r]])
+
+        for gx in (-w / 2, w / 2):
+            for gy in (-h / 2, h / 2):
+                local = R_mat @ np.array([gx, gy])
+                points.append(np.array([cx + local[0], cy + local[1], 0.0]))
+
+    # Connector points placed in the arc between randomly chosen adjacent clusters
+    n = len(cluster_angles)
+    sorted_angles = np.sort(cluster_angles)
+    for _ in range(n_connectors):
+        idx = rng.randint(0, n)
+        a1 = sorted_angles[idx]
+        a2 = sorted_angles[(idx + 1) % n]
+        if a2 < a1:  # handle wrap-around
+            a2 += 2 * np.pi
+        a = a1 + rng.uniform(0.25, 0.75) * (a2 - a1)
+        r = circle_radius + rng.uniform(-0.07, 0.07)
+        points.append(np.array([r * np.cos(a), r * np.sin(a), 0.0]))
+
+    pts = np.array(points)
+
+    # Apply anisotropic noise in the local circle frame (z=0) before tilting:
+    # noise_xy_scale spreads points within the plane; noise_z_scale lifts them
+    # off it, making the 3-D cloud thickness clearly visible.
+    pts[:, :2] += rng.normal(scale=noise_xy_scale, size=(len(pts), 2))
+    pts[:, 2] += rng.normal(scale=noise_z_scale, size=len(pts))
+
+    # Tilt the plane: first rotate around the x-axis by tilt_phi, then around
+    # the z-axis by tilt_theta.
+    cp, sp = np.cos(tilt_phi), np.sin(tilt_phi)
+    Rx = np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
+    ct, st = np.cos(tilt_theta), np.sin(tilt_theta)
+    Rz = np.array([[ct, -st, 0], [st, ct, 0], [0, 0, 1]])
+    pts = pts @ (Rz @ Rx).T
+
+    return pts
+
+
+class HighDimIntro(ThreeDTIMCSlide):
+    def construct(self):
+        self.add_centered_text(
+            "This works well for 2D data\nWhat about higher dimensions?",
+            max_width=0.66,
+            font_size=56,
+        )
+
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        from scipy.spatial.distance import pdist, squareform
+
+        # Angled camera so the tilted cloud reads clearly as 3-D.
+        self.set_camera_orientation(phi=65 * DEGREES, theta=-55 * DEGREES)
+
+        # Build the 3-D point cloud and its distance matrix.
+        pts = _make_vr_demo_cloud()
+        n_pts = len(pts)
+        dist_mat = squareform(pdist(pts))
+        max_r = np.max(dist_mat) * 1.1
+
+        # Scale to scene coordinates (all three dimensions).
+        pts_c = pts - pts.mean(axis=0)
+        vis_scale = 3.5 / (np.max(np.abs(pts_c)) + 1e-9)
+        pts_vis = pts_c * vis_scale  # shape (n, 3)
+        pts_manim = [pts_vis[i] for i in range(n_pts)]
+
+        # ── Points ────────────────────────────────────────────────────────────
+        pt_dots = VGroup(
+            *[Dot3D(point=p, color=DEFAULT_COLOR, radius=0.07) for p in pts_manim]
+        )
+
+        self.play(
+            LaggedStart(*[FadeIn(dot, scale=2.0) for dot in pt_dots], lag_ratio=0.05),
+            run_time=1.5,
+        )
+
+        self.marked_next_slide()
+
+        # ── Spheres (very translucent, low resolution for performance) ────────
+        SPHERE_RES = (12, 12)
+        INIT_R = 0.001
+        spheres = [
+            Sphere(radius=INIT_R, resolution=SPHERE_RES)
+            .set_color(GRAY)
+            .set_opacity(0.10)
+            .move_to(p)
+            for p in pts_manim
+        ]
+        spheres_group = VGroup(*spheres)
+        # Track the current radius so we can scale incrementally (avoids
+        # rebuilding Sphere geometry every frame).
+        current_sphere_r = [INIT_R]
+
+        # ── Edges — pre-sorted by birth radius ────────────────────────────────
+        edge_data = []  # [(r_threshold, Line)]
+        for i in range(n_pts):
+            for j in range(i + 1, n_pts):
+                r_ij = dist_mat[i, j]
+                if r_ij <= max_r:
+                    line = Line(
+                        pts_manim[i],
+                        pts_manim[j],
+                        color=GRAY,
+                        stroke_width=1.5,
+                    ).set_stroke(opacity=0)
+                    edge_data.append((r_ij, line))
+        edge_data.sort(key=lambda x: x[0])
+
+        # ── Triangles — sorted by max-edge birth radius ────────────────────────
+        tri_data = []  # [(r_threshold, Polygon)]
+        for i in range(n_pts):
+            for j in range(i + 1, n_pts):
+                for k in range(j + 1, n_pts):
+                    r_tri = max(dist_mat[i, j], dist_mat[j, k], dist_mat[i, k])
+                    if r_tri <= max_r:
+                        poly = Polygon(
+                            pts_manim[i],
+                            pts_manim[j],
+                            pts_manim[k],
+                            fill_color=ACCENT_COLOR,
+                            fill_opacity=0,
+                            stroke_width=0,
+                        )
+                        tri_data.append((r_tri, poly))
+        tri_data.sort(key=lambda x: x[0])
+
+        # ── 3-Simplices — four triangular faces per tetrahedron, green ─────────
+        # Only pre-build tetrahedra whose birth radius falls within the
+        # animation range, keeping construction time manageable.
+        tet_r_limit = max_r / 3
+        tet_data = []  # [(r_threshold, [face0, face1, face2, face3])]
+        for i in range(n_pts):
+            for j in range(i + 1, n_pts):
+                for k in range(j + 1, n_pts):
+                    for l in range(k + 1, n_pts):
+                        r_tet = max(
+                            dist_mat[i, j],
+                            dist_mat[i, k],
+                            dist_mat[i, l],
+                            dist_mat[j, k],
+                            dist_mat[j, l],
+                            dist_mat[k, l],
+                        )
+                        if r_tet <= tet_r_limit:
+                            faces = [
+                                Polygon(
+                                    pts_manim[a],
+                                    pts_manim[b],
+                                    pts_manim[c],
+                                    fill_color=GREEN_C,
+                                    fill_opacity=0,
+                                    stroke_width=0,
+                                )
+                                for a, b, c in [
+                                    (i, j, k),
+                                    (i, j, l),
+                                    (i, k, l),
+                                    (j, k, l),
+                                ]
+                            ]
+                            tet_data.append((r_tet, faces))
+        tet_data.sort(key=lambda x: x[0])
+
+        all_edges = VGroup(*[e for _, e in edge_data])
+        all_tris = VGroup(*[t for _, t in tri_data])
+        all_tet_faces = VGroup(*[face for _, faces in tet_data for face in faces])
+        self.add(all_tet_faces, all_tris, all_edges, spheres_group)
+
+        r_tracker = ValueTracker(0.0)
+        self.add(r_tracker)
+
+        edge_ptr = [0]
+        tri_ptr = [0]
+        tet_ptr = [0]
+
+        def _reveal_edges(_mob):
+            r = r_tracker.get_value()
+            while edge_ptr[0] < len(edge_data) and edge_data[edge_ptr[0]][0] <= r:
+                edge_data[edge_ptr[0]][1].set_stroke(opacity=0.6)
+                edge_ptr[0] += 1
+
+        def _reveal_tris(_mob):
+            r = r_tracker.get_value()
+            while tri_ptr[0] < len(tri_data) and tri_data[tri_ptr[0]][0] <= r:
+                tri_data[tri_ptr[0]][1].set_fill(opacity=0.12)
+                tri_ptr[0] += 1
+
+        def _reveal_tets(_mob):
+            r = r_tracker.get_value()
+            while tet_ptr[0] < len(tet_data) and tet_data[tet_ptr[0]][0] <= r:
+                for face in tet_data[tet_ptr[0]][1]:
+                    face.set_fill(opacity=0.20)
+                tet_ptr[0] += 1
+
+        def _update_spheres(_mob):
+            r = r_tracker.get_value()
+            target_r = max(INIT_R, r * vis_scale / 2)
+            prev_r = current_sphere_r[0]
+            if abs(target_r - prev_r) < 1e-9:
+                return
+            ratio = target_r / prev_r
+            current_sphere_r[0] = target_r
+            # Scale each sphere about its own centre — no geometry rebuild needed.
+            for sph in spheres:
+                sph.scale(ratio, about_point=sph.get_center())
+
+        all_edges.add_updater(_reveal_edges)
+        all_tris.add_updater(_reveal_tris)
+        all_tet_faces.add_updater(_reveal_tets)
+        spheres_group.add_updater(_update_spheres)
+
+        # Slow ambient rotation lets the audience appreciate the 3-D structure.
+        self.begin_ambient_camera_rotation(rate=0.2)
+        self.play(
+            r_tracker.animate.set_value(max_r / 4),
+            run_time=8.0,
+            rate_func=rate_functions.ease_out_quad,
+        )
+        self.stop_ambient_camera_rotation()
+
+        self.marked_next_slide()
+
+        self.play(FadeOut(spheres_group), run_time=1.0)
+
+        self.marked_next_slide()
+        self.begin_ambient_camera_rotation(rate=0.8)
+        self.wait(8.0)
+        self.stop_ambient_camera_rotation()
+        self.marked_next_slide()
+
+        self.clear_slide(run_time=1.0)
+        self.set_camera_orientation(phi=0 * DEGREES, theta=-90 * DEGREES)
+
+        self.add_centered_text(
+            "We only need distances and volumes to be well behaved",
+            font_size=56,
+            max_width=0.75,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        self.add_centered_text(
+            "And is there a need for very many dimensions in data anyway?",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
