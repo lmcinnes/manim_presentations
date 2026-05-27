@@ -1014,3 +1014,23 @@ class HighDLissajousKnotUMAP2DWithEdges(TIMCSlide):
         pm = PMobject(stroke_width=self._stroke_width)
         pm.add_points(coords, rgbas=rgbas)
         return pm
+
+
+class TransitionToLissajous(TIMCSlide):
+
+    def construct(self):
+        self.add_centered_text(
+            "The circle embedding is a toy example",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+        self.add_centered_text(
+            "We need an example that basic PCA can't solve",
+            font_size=56,
+        )
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
