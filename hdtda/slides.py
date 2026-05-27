@@ -487,147 +487,6 @@ class EffectiveResistanceEmbeddingExplanation(TIMCSlide):
         self.clear_slide()
 
 
-import cv2
-
-
-# --- Custom Video Mobject Implementation ---
-class VideoMobject(ImageMobject):
-    def __init__(self, filename, **kwargs):
-        self.filename = filename
-
-        # 1. Open temporarily to grab dimensions
-        cap = cv2.VideoCapture(filename)
-        self.fps = cap.get(cv2.CAP_PROP_FPS)
-        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.duration = self.frame_count / self.fps
-
-        # Extract metadata dimensions
-        self.video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        ret, frame = cap.read()
-        cap.release()
-
-        if not ret:
-            raise ValueError(f"Could not read video file: {filename}")
-
-        # CRITICAL FIX 1: Convert first frame to RGBA (4 channels) to initialize the parent correctly
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-        super().__init__(frame, **kwargs)
-
-        self.cap = None
-        self.current_time = 0.0
-        self.current_frame_idx = 0
-        self.prev_frame_no = -1
-
-        # Trigger updates on every timeline tick
-        self.add_updater(lambda m, dt: m.update_frame(dt))
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["cap"] = None
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.cap = None
-
-    def __deepcopy__(self, memo):
-        import copy
-
-        # Create a clean, uninitialized instance of VideoMobject
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-
-        # Copy all properties over, but explicitly leave 'cap' out of it
-        for k, v in self.__dict__.items():
-            if k == "cap":
-                result.cap = None  # The copy will instantiate its own fresh stream when it renders
-            else:
-                setattr(result, k, copy.deepcopy(v, memo))
-        return result
-
-    def update_frame(self, dt):
-        if self.cap is None:
-            self.cap = cv2.VideoCapture(self.filename)
-            self.current_frame_idx = 0
-            self.prev_frame_no = -1
-
-        self.current_time += dt
-        frame_no = int(self.current_time * self.fps) % self.frame_count
-
-        # PERFORMANCE FIX: Skip frame processing entirely if the timeline tick
-        # hasn't shifted into a brand new video frame yet.
-        if frame_no == self.prev_frame_no:
-            return
-
-        # PERFORMANCE FIX: Avoid using the expensive set() operation unless
-        # the video loops or jumps out of sequential reading order.
-        if frame_no != self.current_frame_idx:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
-
-        ret, frame = self.cap.read()
-
-        if ret:
-            self.current_frame_idx = frame_no + 1
-            self.prev_frame_no = frame_no
-
-            # CRITICAL FIX 2: Convert streaming frames to RGBA to match Manim's 4-channel matrix specs
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-
-            # Ensure the array structure precisely matches original specs
-            if (
-                frame.shape[1] != self.video_width
-                or frame.shape[0] != self.video_height
-            ):
-                frame = cv2.resize(frame, (self.video_width, self.video_height))
-
-            # Safely replace pixel matrix texture data
-            if hasattr(self, "set_pixel_array"):
-                self.set_pixel_array(frame)
-            else:
-                self.pixel_array = frame
-
-
-class HighDExampleUseCases(TIMCSlide):
-    def construct(self):
-
-        self.add_centered_text(
-            "Activation spaces of deep Neural Networks",
-            max_width=0.66,
-        )
-        self.wait()
-        self.marked_next_slide()
-
-        self.clear_slide()
-
-        neural_video = VideoMobject("Neural network geometry.mp4")
-        neural_video.scale_to_fit_height(config.frame_height * 0.8)
-        # self.play(FadeIn(neural_video))
-        self.add(neural_video)
-        self.wait(neural_video.duration * 3)
-        self.marked_next_slide()
-
-        self.play(FadeOut(neural_video))
-        self.add_centered_text(
-            "Biology, especially single-cell genomics",
-            max_width=0.75,
-        )
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
-        sc_video = VideoMobject("zebrafish_scrna.mp4")
-        sc_video.scale_to_fit_height(config.frame_height * 0.66)
-        # self.play(FadeIn(sc_video))
-        self.add(sc_video)
-        self.wait(sc_video.duration * 2)
-        self.marked_next_slide()
-
-        self.play(FadeOut(sc_video))
-        self.wait()
-
-
 class GeneralizedBetaPrimeDistribution(TIMCSlide):
     def construct(self):
         self.add_centered_text("Generalized Beta Prime Distribution", max_width=0.66)
@@ -1120,3 +979,74 @@ class GradientOfLoss(TIMCSlide):
         self.wait()
         self.marked_next_slide()
         self.clear_slide()
+
+
+class Intro(TIMCSlide):
+
+    def construct(self):
+
+        title_top1 = Paragraph(
+            "Persistent Homology",
+            font_size=64,
+            font="Marcellus SC",
+        )
+        title_top2 = Text(
+            "in",
+            font_size=48,
+            font="Marcellus SC",
+        )
+        title_top3 = Text(
+            "High-dimensions",
+            font_size=64,
+            font="Marcellus SC",
+        )
+        title_top = VGroup(title_top1, title_top2, title_top3).arrange(DOWN, buff=0.125)
+        title_middle = Text(
+            "and",
+            font_size=48,
+            font="Marcellus SC",
+        )
+        title_bottom = Text(
+            "Dimensionality Reduction",
+            font_size=64,
+            font="Marcellus SC",
+        )
+
+        title = VGroup(title_top, title_middle, title_bottom).arrange(DOWN, buff=0.25)
+        author = Text(
+            "Leland McInnes",
+            font_size=42,
+            font="Marcellus SC",
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        ).next_to(title, DOWN, buff=0.75)
+
+        self.add(title, author)
+        self.wait(2)
+        self.marked_next_slide()
+        self.clear_slide()
+
+
+class Summary(TIMCSlide):
+
+    def construct(self):
+
+        summary_points = [
+            "Persistent homology is powerful",
+            "High dimensional data presents unique challenges",
+            "Force-directed embeddings can provide a principled approach",
+            "Dimension reduction can be critical for recovering topology",
+        ]
+
+        for point in summary_points:
+            self.add_centered_text(point, max_width=0.66, font="Marcellus SC")
+            self.wait()
+            self.marked_next_slide()
+            self.clear_slide()
+
+        self.add_centered_text(
+            "Thank you!\n\nQuestions?",
+            max_width=0.66,
+            font="Marcellus SC",
+        )
+        self.wait()
