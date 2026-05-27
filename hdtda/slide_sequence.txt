@@ -1,15 +1,15 @@
-# Intro
+Intro
 VietorisRipsExplanation
 SimplicialHomologyExplanation
 PersistenceExplanation
-# HighDimIntro
+HighDimIntro
 HighDExampleUseCases
 SphereShellVolume
 ShadedNNDistribution
-PersistanceDiagramExpectations
 ExampleCircleEmbeddingConstruction
+PersistanceDiagramExpectations
 DynamicPersistenceAnimation
-# TransitionToLissajous
+TransitionToLissajous
 LissajousKnotIntroduction
 LissajousKnot
 HighDLissajousPCA
@@ -32,12 +32,12 @@ CompareLissajousPersistence
 WhatMakesItWork
 HighDLissajousKnotUMAP2DWithEdges
 LEtoFDExplanation
-FDComparisontoUMAP
+FDComparisonToUMAP
 GradientOfLoss
 ForceParameterization
-GeneralizedBetaPrime
+GeneralizedBetaPrimeDistribution
 AnimatedUMAPOptimizationMNIST1
 AnimatedUMAPOptimizationMNIST3
 AnimatedUMAPOptimizationFashionMNIST1
 AnimatedUMAPOptimizationFashionMNIST3
-# Summary
+Summary
