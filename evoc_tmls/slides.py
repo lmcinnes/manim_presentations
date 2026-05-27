@@ -3959,3 +3959,717 @@ class ScalingPerformance(TIMCSlide):
 #         )
 
 #         self.wait(2)
+
+
+class EVoCVideo(ThreeDTIMCSlide):
+
+    def construct(self):
+
+        logo = SVGMobject(IMAGE_DIR / "evoc_logo_horizontal.svg").scale(2.0)
+        self.add(logo)
+
+        self.wait(3)
+
+        self.play(FadeOut(logo))
+
+        ############################
+        # PIPELINE
+        ################################################################
+        self.play(Write(Text("Algorithm Overview", font_size=56).shift(UP * 2.5)))
+
+        # --- 1. THE DATA STRUCTURES ---
+        # A. Hypercube Embeddings
+        # --- Setup Layout ---
+        # Create placeholders to define where each stage lives on screen
+        stage_1_placeholder = VectorizedPoint().shift(LEFT * 4.5)
+
+        # --- Create Stage 1 ---
+        cube = Cube(side_length=1.5)
+        cube.set_stroke(GRAY, 1)
+        cube.set_fill(WHITE, opacity=0.05)
+
+        rng = np.random.RandomState(42)
+
+        dots_cube = VGroup(
+            *[
+                Dot3D(
+                    point=[rng.uniform(-0.6, 0.6) for _ in range(3)],
+                    radius=0.03,
+                    color=DEFAULT_COLOR,
+                ).set_opacity(
+                    rng.uniform(0.3, 1.0)
+                )  # Simplified depth hint
+                for _ in range(40)
+            ]
+        )
+
+        stage_1 = VGroup(cube, dots_cube)
+        stage_1.move_to(stage_1_placeholder)  # Fixes it in the "left slot"
+
+        # B. UMAP Blobs
+        manifold_axes = Axes(
+            x_range=[0, 1.2, 1],
+            y_range=[0, 1, 1],
+            x_length=2,
+            y_length=1.5,
+            axis_config={
+                "include_tip": True,
+                "include_ticks": False,
+                "tip_shape": StealthTip,
+                "tip_height": 0.15,
+                "tip_width": 0.15,
+            },
+        )
+        blob_centers = [
+            LEFT * 0.3 + UP * 0.2,
+            RIGHT * 0.4,
+            DOWN * 0.6,
+            LEFT + 0.4 + DOWN * 0.3,
+        ]
+        dots_blobs = VGroup(
+            *[
+                Dot(
+                    rng.normal(c, 0.1),
+                    radius=0.04,
+                    color=ACCENT_COLOR,
+                ).set_opacity(0.75)
+                for c in blob_centers
+                for _ in range(15)
+            ]
+        )
+        stage_2 = VGroup(manifold_axes, dots_blobs)
+
+        # C. Reachability Plot (Cartoon version)
+        axes = Axes(
+            x_range=[0, 1.2, 1],
+            y_range=[0, 1, 1],
+            x_length=2,
+            y_length=1.5,
+            axis_config={
+                "include_tip": True,
+                "include_ticks": False,
+                "tip_shape": StealthTip,
+                "tip_height": 0.15,
+                "tip_width": 0.15,
+            },
+        )
+        ctree = scaled_ctree
+        points_in_pdf_order = scaled_points_in_pdf_order
+        pdf_order_of_points = scaled_pdf_order_of_points
+        density_values = scaled_density_values
+
+        lines = VGroup()
+
+        max_density = density_values.max()
+        min_density = density_values.min()
+
+        for idx in range(base_data.shape[0]):
+            x_pos = idx / base_data.shape[0]
+            line = Line(
+                start=axes.c2p(x_pos, 0),
+                end=axes.c2p(x_pos, density_values[idx]),
+                stroke_width=0.5,
+                color=colormap_color(density_values[idx], min_density, max_density),
+            ).set_opacity(0.0)
+            lines.add(line)
+
+        stage_3 = VGroup(axes, lines)
+
+        # 1. Adjust the Matrix for a "flatter" look
+        # Lowering the [1][1] value or stretching the Y axis down makes it flatter
+        shear_matrix = [[1, 1.2, 0], [0, 0.6, 0], [0, 0, 1]]
+
+        # 2. Define persistent centers (to ensure hierarchy/no overlaps)
+        # These are the "seeds" for the clusters
+        base_centers = [
+            [-0.7, -0.2, 0],
+            [0.7, 0.2, 0],  # Group A
+            [-0.1, 0.3, 0],
+            [0.2, -0.3, 0],  # Group B
+            [0.8, -0.2, 0],  # Group C
+        ]
+
+        layers = VGroup()
+        for i in range(3):
+            # Create the base sheet
+            sheet = Rectangle(width=3.0, height=1.5)
+            sheet.set_stroke(GRAY, 1)
+            sheet.set_fill(interpolate_color(WHITE, GRAY, 0.15), opacity=0.9)
+
+            # Determine which centers to keep for this "resolution" layer
+            # Layer 0: all, Layer 1: subset, Layer 2: one large "global" cluster
+            if i == 0:
+                current_centers = base_centers
+                r = 0.15
+            elif i == 1:
+                current_centers = [base_centers[0], base_centers[2], base_centers[4]]
+                r = 0.3
+            else:
+                current_centers = [[0, 0, 0]]
+                r = 0.6
+
+            clusters = VGroup(
+                *[
+                    Circle(
+                        radius=r,
+                        color=interpolate_color(ACCENT_COLOR, DEFAULT_COLOR, i / 2.5),
+                        fill_opacity=0.4,
+                        stroke_width=2,
+                    ).move_to(loc)
+                    for loc in current_centers
+                ]
+            )
+
+            layer = VGroup(sheet, clusters)
+
+            # Apply the flattening transformation
+            layer.apply_matrix(shear_matrix)
+
+            # Stack them with decreasing opacity to give "depth"
+            layer.set_opacity(1.0 - (i * 0.15))
+            # layer.move_to(stage_4_placeholder)
+            # layer.shift(UP * i * 0.6)
+            layers.add(layer)
+
+        # 2. Create an invisible 'Space Holder'
+        # This should match the total height of your FINAL spread (e.g., sheet height + total shift)
+        proxy_box = Rectangle(
+            width=3.0,
+            height=1.0 + (2 * 0.33),  # Sheet height + total UP shift
+            stroke_opacity=0,
+            fill_opacity=0,
+        )
+        proxy_box.align_to(layers[0], DOWN)
+        stage_4 = VGroup(proxy_box, layers.scale(0.6))
+
+        # --- 2. LAYOUT ---
+        pipeline = VGroup(stage_1, stage_2, stage_3, stage_4).arrange(RIGHT, buff=1.5)
+        pipeline.set_width(config.frame_width * 0.9)
+
+        # Labels
+        labels = VGroup(
+            Text("Embeddings", font_size=20).next_to(stage_1, DOWN),
+            Text("Manifold", font_size=20).next_to(stage_2, DOWN),
+            Text("Density", font_size=20).next_to(stage_3, DOWN),
+            Text("Multiscale Clusters", font_size=20).next_to(stage_4, DOWN),
+        )
+
+        # --- 3. ANIMATION STEPS ---
+
+        # --- Animation ---
+        self.play(FadeIn(stage_1), run_time=1.0)
+
+        # Rotate around its own center, not the screen origin
+        self.play(
+            Rotate(
+                stage_1,
+                angle=2 * PI,
+                axis=np.array([1, 1, 1]),  # Diagonal axis for a "dynamic" spin
+                about_point=stage_1.get_center(),
+                run_time=1.5,
+                rate_func=smooth,
+            ),
+            Write(labels[0]),
+        )
+        self.marked_next_slide()
+
+        # Reveal next stage with an arrow
+        arrow1 = Arrow(stage_1.get_right(), stage_2.get_left(), buff=0.1)
+        self.play(
+            GrowArrow(arrow1),
+            ReplacementTransform(stage_1[1].copy(), dots_blobs.scale(1.1)),
+            Write(labels[1]),
+        )
+        self.marked_next_slide()
+
+        arrow2 = Arrow(stage_2.get_right(), stage_3.get_left(), buff=0.1)
+        self.play(GrowArrow(arrow2), Create(axes), Write(labels[2]))
+        for line in lines:
+            line.set_opacity(1.0)
+        self.play(*[Create(line) for line in lines])
+        self.marked_next_slide()
+
+        arrow3 = Arrow(stage_3.get_right(), stage_4.get_left(), buff=0.1)
+        self.play(GrowArrow(arrow3), FadeIn(stage_4))
+        self.play(
+            layers[1].animate.shift(UP * 0.33).set_rate_func(rush_into),
+            layers[2].animate.shift(UP * 0.66).set_rate_func(rush_into),
+            Write(labels[3]),
+        )
+
+        self.wait(2)
+
+        self.clear_slide()
+
+        #############################################################
+        # BENCHMARK RESULTS
+        ################################################################
+
+        # 1. Configuration for the 3 distinct datasets
+        datasets = [
+            {
+                "name_lines": [
+                    "Clustering",
+                    "results for",
+                    "CIFAR-100",
+                    "Embedded with",
+                    "CLIP",
+                ],
+                "data": {
+                    "ARI": (
+                        benchmark_data["cifar"]["ari"]["swarms"],
+                        benchmark_data["cifar"]["ari"]["yticks"],
+                    ),
+                    "Score": (
+                        benchmark_data["cifar"]["cs"]["swarms"],
+                        benchmark_data["cifar"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["cifar"]["time"]["swarms"],
+                        benchmark_data["cifar"]["time"]["yticks"],
+                    ),
+                },
+            },
+            {
+                "name_lines": [
+                    "Clustering",
+                    "results for",
+                    "20-Newsgroups",
+                    "Embedded with",
+                    "mpnet-base-v2",
+                ],
+                "data": {
+                    "ARI": (
+                        benchmark_data["news"]["ari"]["swarms"],
+                        benchmark_data["news"]["ari"]["yticks"],
+                    ),
+                    "Score": (
+                        benchmark_data["news"]["cs"]["swarms"],
+                        benchmark_data["news"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["news"]["time"]["swarms"],
+                        benchmark_data["news"]["time"]["yticks"],
+                    ),
+                },
+            },
+            {
+                "name_lines": [
+                    "Clustering",
+                    "results for",
+                    "BirdCLEF-2023",
+                    "Embedded with",
+                    "Google",
+                    "Bird Vocalization",
+                    "Classifier",
+                ],
+                "data": {
+                    "ARI": (
+                        benchmark_data["bird"]["ari"]["swarms"],
+                        benchmark_data["bird"]["ari"]["yticks"],
+                    ),
+                    "Score": (
+                        benchmark_data["bird"]["cs"]["swarms"],
+                        benchmark_data["bird"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["bird"]["time"]["swarms"],
+                        benchmark_data["bird"]["time"]["yticks"],
+                    ),
+                },
+            },
+            {
+                "name_lines": [
+                    "Clustering",
+                    "results for",
+                    "MNIST",
+                    "Handwritten",
+                    "Digits",
+                    "Embedded with",
+                    "Raw Pixel Values",
+                ],
+                "data": {
+                    "ARI": (
+                        benchmark_data["mnist"]["ari"]["swarms"],
+                        benchmark_data["mnist"]["ari"]["yticks"],
+                    ),
+                    "Score": (
+                        benchmark_data["mnist"]["cs"]["swarms"],
+                        benchmark_data["mnist"]["ari"]["yticks"],
+                    ),
+                    "Time": (
+                        benchmark_data["mnist"]["time"]["swarms"],
+                        benchmark_data["mnist"]["time"]["yticks"],
+                    ),
+                },
+            },
+        ]
+
+        categories = ["K-Means", "UMAP+HDBSCAN", "EVoC"]
+
+        # Define the layout box for the title (visual reference, not added to scene)
+        title_box = Rectangle(height=6, width=4).to_edge(RIGHT, buff=0.75)
+
+        # Trackers for objects that persist across loops
+        current_plot_group = VGroup()
+        current_dots = VGroup()
+        current_title = None
+
+        for dataset in datasets:
+            # --- 1. Title Sequence ---
+            title_text = self._create_title(dataset["name_lines"], title_box)
+            self.play(Write(title_text))
+            self.marked_next_slide()
+
+            current_title = title_text
+
+            # --- 2. Iterate Metrics (ARI -> Score -> Time) ---
+            for i, (metric_name, (swarm_data, y_ticks)) in enumerate(
+                dataset["data"].items()
+            ):
+                y_min = y_ticks[0]
+                y_max = y_ticks[-1]
+                y_step = y_ticks[1] - y_ticks[0]
+
+                # Create the axes using the config helper
+                new_plot_group = create_styled_axes(
+                    x_range=[0, 4, 1],
+                    y_range=[y_min, y_max, y_step],
+                    x_label_tex="Clustering Algorithm",
+                    y_label_tex=self._get_metric_label(metric_name),
+                    y_decimal_places=1 if metric_name == "Time" else 2,
+                    x_tick_labels=categories,
+                ).shift(UP * 0.5 + LEFT)
+                new_axes = new_plot_group[0]
+
+                # --- 3. Handle Transitions ---
+                if i == 0:
+                    # First metric: Fade everything IN
+                    self.play(
+                        current_title.animate.move_to(title_box.get_center()),
+                        Create(new_plot_group),
+                    )
+
+                    # Create Dots (Only needed once per dataset)
+                    current_dots = self._create_swarm_dots(
+                        categories, swarm_data, new_axes
+                    )
+                    self.play(
+                        LaggedStart(
+                            *[FadeIn(dot, scale=2.0) for dot in current_dots],
+                            lag_ratio=3.0 / len(current_dots),
+                        ),
+                        run_time=1.0,
+                    )
+
+                else:
+                    # Subsequent metrics: Transform Axes and Move Dots
+                    dot_animations = self._get_dot_move_animations(
+                        categories,
+                        swarm_data,
+                        current_dots,
+                        new_axes,
+                        metric_name,
+                    )
+
+                    self.play(
+                        ReplacementTransform(current_plot_group, new_plot_group),
+                        *dot_animations,
+                    )
+
+                current_plot_group = new_plot_group
+                self.wait(1.5)
+
+            # --- 4. Cleanup before next dataset ---
+            if not "MNIST" in dataset["name_lines"]:
+                self.play(
+                    FadeOut(current_plot_group),
+                    FadeOut(current_dots),
+                    FadeOut(current_title),
+                )
+                self.wait(0.5)
+            else:
+                print(f"Skipping cleanup for {dataset}")
+
+        self.clear_slide(run_time=1.0)
+
+        # 1. Setup Mock Data (Same logic as before)
+        algorithms = ["UMAP + HDBSCAN", "K-Means", "Minibatch K-Means", "EVōC"]
+        colors = [
+            DEFAULT_COLOR,
+            DEFAULT_COLOR.interpolate(ACCENT_COLOR, 0.75),
+            ACCENT_COLOR.interpolate(WHITE, 0.5),
+            HIGHLIGHT_COLOR,
+        ]
+        # data_list = []
+        # for alg in algorithms:
+        #     sizes = np.linspace(100, 1000, 12)
+        #     # Power law: Time = k * Size^power
+        #     power = 2.0 if alg == "K-Means" else 1.5 if alg == "DBSCAN" else 1.1
+        #     times = (sizes / 100) ** power + np.random.normal(0, 0.5, 12)
+        #     for s, t in zip(sizes, times):
+        #         data_list.append({"size": s, "time": max(0.1, t), "algorithm": alg})
+
+        # df = pd.DataFrame(data_list)
+        df = pd.read_csv(BENCHMARKS_DIR / "scaling_benchmark_results.csv")
+
+        sorted_algs = (
+            df.groupby("algorithm")["time"]
+            .max()
+            .sort_values(ascending=False)
+            .index.tolist()
+        )
+
+        # 2. Coordinate Systems
+        ax_lin = Axes(
+            x_range=[0, 1_200_000, 250_000],
+            y_range=[0, round(df["time"].max() + 5, -1), 50],
+            x_length=9,
+            y_length=5.5,
+            axis_config={"include_tip": False},
+        ).add_coordinates()
+
+        ax_log = Axes(
+            x_range=[4, 6.5],  # log10(100) to log10(1000ish)
+            y_range=[-1, 3.0],  # log10(0.1) to log10(100ish)
+            x_length=9,
+            y_length=5.5,
+            x_axis_config={"scaling": LogBase(10)},
+            y_axis_config={"scaling": LogBase(10)},
+            axis_config={"include_tip": False},
+        ).add_coordinates()
+
+        # Labels
+        # Custom Text Labels (Linear)
+        x_lab_lin = Text("Dataset Size", font_size=24).next_to(
+            ax_lin.x_axis, DOWN, buff=0.2
+        )
+        y_lab_lin = (
+            Text("Execution Time (s)", font_size=24)
+            .rotate(90 * DEGREES)
+            .next_to(ax_lin.y_axis, LEFT, buff=0.2)
+        )
+        labels_lin = VGroup(x_lab_lin, y_lab_lin)
+
+        # Custom Text Labels (Log)
+        x_lab_log = Text("Size (Log Scale)", font_size=24).next_to(
+            ax_log.x_axis, DOWN, buff=0.2
+        )
+        y_lab_log = (
+            Text("Time (Log Scale)", font_size=24)
+            .rotate(90 * DEGREES)
+            .next_to(ax_log.y_axis, LEFT, buff=0.2)
+        )
+        labels_log = VGroup(x_lab_log, y_lab_log)
+        # labels_lin = ax_lin.get_axis_labels(x_label="Size", y_label="Time")
+        # labels_log = ax_log.get_axis_labels(x_label="log(Size)", y_label="log(Time)")
+
+        # 3. Storage for Objects
+        all_lin_dots = VGroup()
+        all_lin_curves = VGroup()
+        all_log_dots = VGroup()
+        all_log_curves = VGroup()
+        all_curve_labels = VGroup()
+
+        # Initial Draw
+        self.play(Write(ax_lin), Write(labels_lin))
+
+        # 4. Progressive Drawing (Linear Space)
+        for i, alg in enumerate(sorted_algs):
+            alg_data = df[df["algorithm"] == alg].sort_values("size")
+            color = colors[i]
+
+            # Linear Objects
+            dots = VGroup(
+                *[
+                    Dot(ax_lin.c2p(r["size"], r["time"]), color=color, radius=0.06)
+                    for _, r in alg_data.iterrows()
+                ]
+            )
+            coeffs = np.polyfit(alg_data["size"], alg_data["time"], 2)
+            poly = np.poly1d(coeffs)
+            curve = ax_lin.plot(
+                lambda x: poly(x), x_range=[100, 1_000_000], color=color
+            )
+
+            # Log Objects (The "Targets" for the morph)
+            log_dots = VGroup(
+                *[
+                    Dot(ax_log.c2p(r["size"], r["time"]), color=color, radius=0.06)
+                    for _, r in alg_data.iterrows()
+                ]
+            )
+            # In Log-Log space, the fit is a straight line.
+            # We plot it using 2 points for maximum stability during Transform
+            log_x = np.log10(
+                alg_data["size"][alg_data["size"] > 10_000]
+            )  # Avoid log(0)
+            log_y = np.log10(alg_data["time"][alg_data["size"] > 10_000])
+            m, b = np.polyfit(log_x, log_y, 1)
+
+            # Using plot_line_graph is much more stable than ax_log.plot for transforms
+            log_curve = ax_log.plot_line_graph(
+                x_values=[10_000, 1_000_000],
+                y_values=[
+                    10 ** (m * np.log10(10_000) + b),
+                    10 ** (m * np.log10(1_000_000) + b),
+                ],
+                add_vertex_dots=False,
+                line_color=color,
+            )
+
+            label = Text(
+                algorithms[i], color=color, stroke_color=color, font_size=16
+            ).next_to(curve.get_end(), RIGHT, buff=0.25)
+
+            # Animate Linear Appearance
+            self.play(LaggedStartMap(FadeIn, dots, shift=UP * 0.2, lag_ratio=0.1))
+            self.play(Create(curve), Write(label), run_time=1.5)
+
+            all_lin_dots.add(dots)
+            all_lin_curves.add(curve)
+            all_curve_labels.add(label)
+            all_log_dots.add(log_dots)
+            all_log_curves.add(log_curve)
+
+        self.wait(2)
+
+        # 5. THE BIG TRANSITION
+        self.play(
+            ReplacementTransform(ax_lin, ax_log),
+            ReplacementTransform(labels_lin, labels_log),
+            ReplacementTransform(all_lin_dots, all_log_dots),
+            ReplacementTransform(all_lin_curves, all_log_curves),
+            *[
+                label.animate.next_to(curve["line_graph"].get_end(), RIGHT, buff=0.25)
+                for label, curve in zip(all_curve_labels, all_log_curves)
+            ],
+            run_time=3,
+            # rate_func=slow_into_fast,
+        )
+
+        self.wait(2)
+        self.clear_slide()
+
+        logo = (
+            SVGMobject(IMAGE_DIR / "evoc_logo_horizontal.svg")
+            .scale(2.0)
+            .shift(RIGHT * 3)
+        )
+
+        # self.play(Create(logo))
+        print(list(logo))
+        parts = logo[:3] + VGroup(logo[3:8]) + VGroup(logo[8:-2]) + logo[-2:]
+        # self.play(
+        #     AnimationGroup(
+        #         *[
+        #             DrawBorderThenFill(part, stroke_color=part.get_fill_color())
+        #             for part in parts
+        #         ],
+        #         lag_ratio=1.05,
+        #     ),
+        #     run_time=6,
+        # )
+        self.play(
+            AnimationGroup(
+                *[
+                    DrawBorderThenFill(part, stroke_color=part.get_fill_color())
+                    for part in parts[:3]
+                ],
+                lag_ratio=1.05,
+            ),
+            run_time=2,
+        )
+        for part in parts[3:]:
+            part.set_opacity(0.0)
+        self.play(logo.animate.shift(LEFT * 3))
+        parts[3].set_opacity(1.0)
+        self.play(Write(parts[3]))
+        parts[4].set_opacity(1.0)
+        for part in parts[5:]:
+            part.set_opacity(1.0)
+        self.play(
+            Write(parts[4]),
+            DrawBorderThenFill(parts[5:], stroke_width=0.25, stroke_color=ACCENT_COLOR),
+            run_time=1.0,
+        )
+
+        self.wait(0.5)
+
+        url = Text("https://github.com/TutteInstitute/evoc", font_size=32).next_to(
+            logo, DOWN, buff=1
+        )
+        install = Text("pip install evoc", font_size=32).next_to(url, DOWN, buff=0.1)
+
+        self.play(FadeIn(url))
+        self.play(FadeIn(install))
+
+    def _create_title(self, lines, target_box):
+        """Creates the title paragraph, scaled to fit the target box width."""
+        title = Paragraph(*lines, alignment="center", line_spacing=0.5)
+        title.scale_to_fit_width(target_box.width - 0.5)
+        return title
+
+    def _get_metric_label(self, metric_name):
+        """Returns the Tex string for axis labels."""
+        if metric_name == "ARI":
+            return "Adjusted Rand Index"
+        elif metric_name == "Score":
+            return "Clustering Score"
+        elif metric_name == "Time":
+            return "Time (s)"
+        return metric_name
+
+    def _create_swarm_dots(self, categories, swarm_data, axes):
+        """Generates the VGroup of dots for the initial swarm plot."""
+        dots_group = VGroup()
+        # Create a substructure to easily find dots by category later
+        dots_group.category_map = {cat: VGroup() for cat in categories}
+
+        for i, category in enumerate(categories):
+            points_list = swarm_data.get(category, [])
+            for pos in points_list:
+                x_coord = 1 + i + (pos[0] - i) * 1.5  # Scale x for better spacing
+                y_coord = pos[1]
+
+                dot = Dot(
+                    axes.c2p(x_coord, y_coord),
+                    radius=0.05,
+                    color=SWARM_COLORS[category],
+                    stroke_width=0.5,
+                    stroke_color=BACKGROUND_COLOR,
+                )
+                dots_group.add(dot)
+                dots_group.category_map[category].add(dot)
+
+        return dots_group
+
+    def _get_dot_move_animations(
+        self,
+        categories,
+        target_swarm_data,
+        current_dots_group,
+        target_axes,
+        metric_name,
+    ):
+        """Calculates animations to move existing dots to new positions."""
+        animations = []
+
+        for i, category in enumerate(categories):
+            target_positions = target_swarm_data.get(category, [])
+            current_category_dots = current_dots_group.category_map[category]
+
+            # We assume len(dots) == len(target_positions) because it's the same dataset
+            for j, dot in enumerate(current_category_dots):
+                if j < len(target_positions):
+                    pos = target_positions[j]
+
+                    move_scale = 1.5 if metric_name == "Time" else 1.5
+
+                    x_coord = 1 + i + (pos[0] - i) * move_scale
+                    y_coord = pos[1]
+
+                    animations.append(
+                        dot.animate.move_to(target_axes.c2p(x_coord, y_coord))
+                    )
+        return animations

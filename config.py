@@ -141,6 +141,11 @@ def add_logo_to_scene(scene):
     logo = create_logo()
     if logo is not None:
         if isinstance(scene, ThreeDScene):
+            if config.renderer == RendererType.OPENGL:
+                # OpenGL renderer: ImageMobject doesn't support the fixed_in_frame
+                # shader uniform used by add_fixed_in_frame_mobjects, so skip the logo.
+                scene.logo = None
+                return None
             scene.add_fixed_in_frame_mobjects(logo)
         else:
             scene.add(logo)
@@ -158,6 +163,11 @@ def add_logo_to_background(scene):
     logo = create_logo()
     if logo is not None:
         if isinstance(scene, ThreeDScene):
+            if config.renderer == RendererType.OPENGL:
+                # OpenGL renderer: ImageMobject doesn't support the fixed_in_frame
+                # shader uniform used by add_fixed_in_frame_mobjects, so skip the logo.
+                scene.logo = None
+                return None
             scene.add_fixed_in_frame_mobjects(logo)
         else:
             scene.add_foreground_mobject(logo)
