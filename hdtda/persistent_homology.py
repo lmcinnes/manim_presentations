@@ -1956,7 +1956,7 @@ class CompareLissajousPersistence(TIMCSlide):
     def construct(self):
         print("Starting CompareLissajousPersistence construction...")
         import sys
-        from data_generation import effective_resistance_distance_embedding
+        from data_generation import effective_resistance_distance_embedding, get_eff_res
 
         sys.stdout.flush()
         # 1. Setup Data
@@ -1971,8 +1971,10 @@ class CompareLissajousPersistence(TIMCSlide):
         subset_size = min(1000, len(X_embedded))
         dgm_hd = ripser(X_embedded[:subset_size], maxdim=1)["dgms"]
 
-        X_eff = effective_resistance_distance_embedding(X_embedded)
-        dgm_eff = ripser(X_eff, maxdim=1)["dgms"]
+        # X_eff = effective_resistance_distance_embedding(X_embedded)
+        # dgm_eff = ripser(X_eff, maxdim=1)["dgms"]
+        d_eff = get_eff_res(X_embedded, k=15)
+        dgm_eff = ripser(d_eff, distance_matrix=True, maxdim=1)["dgms"]
 
         X_umap = umap.UMAP(n_components=3, random_state=self._seed).fit_transform(
             X_embedded
