@@ -195,7 +195,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
         self.marked_next_slide()
 
         sphere = (
-            Sphere(radius=2.0, fill_opacity=1.0, resolution=8)  # resolution=64)
+            Sphere(radius=2.0, fill_opacity=1.0, resolution=64)  # resolution=64)
             .rotate_about_origin(90 * DEGREES, axis=RIGHT)
             .set_color(ACCENT_COLOR)
         )
@@ -219,7 +219,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
                 radius=2.3,
                 fill_opacity=0.25,
                 stroke_opacity=0.25,
-                resolution=8,
+                resolution=64,
                 # resolution=128,
             )
             .rotate_about_origin(90 * DEGREES, axis=RIGHT)
