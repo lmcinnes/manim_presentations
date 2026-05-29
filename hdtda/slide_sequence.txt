@@ -1,23 +1,23 @@
-Intro
+# Intro
 VietorisRipsExplanation
 SimplicialHomologyExplanation
 PersistenceExplanation
-HighDimIntro
-HighDExampleUseCases
+# HighDimIntro
+# HighDExampleUseCases
 SphereShellVolume
 ShadedNNDistribution
-ExampleCircleEmbeddingConstruction
 PersistanceDiagramExpectations
+ExampleCircleEmbeddingConstruction
 DynamicPersistenceAnimation
-TransitionToLissajous
+PCAFindsSignal
+# TransitionToLissajous
 LissajousKnotIntroduction
 LissajousKnot
-HighDLissajousPCA
-LissajousKnotPersistenceDiagram
 HardHighDLissajousPCA
 HardHighDLissajousPCA5D
+LissajousKnotPersistenceDiagram
 DynamicPersistenceLissajousPCA
-DamrichHDPersistentHomologyPaper
+# DamrichHDPersistentHomologyPaper
 ElectricResistanceGrid
 EffectiveResistanceCommute
 LissajousKnotPersistenceDiagramEffRes
@@ -29,7 +29,7 @@ UMAPExplanation
 HardHighDLissajousUMAP
 HardHighDLissajousUMAP5D
 CompareLissajousPersistence
-WhatMakesItWork
+# WhatMakesItWork
 HighDLissajousKnotUMAP2DWithEdges
 LEtoFDExplanation
 FDComparisonToUMAP
@@ -40,4 +40,4 @@ AnimatedUMAPOptimizationMNIST1
 AnimatedUMAPOptimizationMNIST3
 AnimatedUMAPOptimizationFashionMNIST1
 AnimatedUMAPOptimizationFashionMNIST3
-Summary
+# Summary
