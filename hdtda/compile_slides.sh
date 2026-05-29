@@ -11,4 +11,4 @@ for slide_file in $slide_files; do
     fi
 done
 
-uv run --active manim-slides convert --to pptx $required_slides
+uv run --active manim-slides convert --to pptx $required_slides hdtda.pptx
