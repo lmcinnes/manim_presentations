@@ -867,6 +867,8 @@ def umap_label_propagation_init(
     verbose=False,
 ):
 
+    print("Using n_embedding_epochs =", n_embedding_epochs)
+
     if random_state is None:
         random_state = np.random.RandomState()
 
@@ -1088,6 +1090,8 @@ def make_umap_animation_data(
     gamma=4.0,
     negative_selection_range_denominator=2,
     init_scale=1.0,
+    include_initialization_steps=True,
+    n_epochs=500,
 ):
     umap_init, init_steps = recursive_init_umap(graph, data)
     init_steps = [step * init_scale for step in init_steps]
@@ -1099,7 +1103,7 @@ def make_umap_animation_data(
         umap_init,
         None,
         None,
-        500,
+        n_epochs,
         graph.shape[0],
         epochs_per_sample,
         a,
@@ -1122,7 +1126,11 @@ def make_umap_animation_data(
         negative_selection_range=umap_init.shape[0]
         / negative_selection_range_denominator,
     )
-    init_steps += steps
+    if include_initialization_steps:
+        init_steps += steps
+    else:
+        init_steps = steps
+
     return init_steps
 
 
@@ -1153,11 +1161,27 @@ anim_steps = make_umap_animation_data(graph_f, fmnist_data)
 np.save("fashion_mnist_umap_animation_steps_1.npy", anim_steps)
 np.save("fashion_mnist_targets.npy", fmnist_target)
 
-anim_steps = make_umap_animation_data(graph, mnist_data, a=0.85, b=0.55, gamma=8.0)
+anim_steps = make_umap_animation_data(
+    graph,
+    mnist_data,
+    a=0.85,
+    b=0.55,
+    gamma=8.0,
+    include_initialization_steps=False,
+    n_epochs=1000,
+)
 np.save("mnist_umap_animation_steps_2.npy", anim_steps)
 
 
-anim_steps = make_umap_animation_data(graph_f, fmnist_data, a=0.85, b=0.55, gamma=8.0)
+anim_steps = make_umap_animation_data(
+    graph_f,
+    fmnist_data,
+    a=0.85,
+    b=0.55,
+    gamma=8.0,
+    include_initialization_steps=False,
+    n_epochs=1000,
+)
 np.save("fashion_mnist_umap_animation_steps_2.npy", anim_steps)
 
 
@@ -1169,6 +1193,7 @@ anim_steps = make_umap_animation_data(
     gamma=16.0,
     negative_selection_range_denominator=128,
     init_scale=2.0,
+    include_initialization_steps=False,
 )
 np.save("mnist_umap_animation_steps_3.npy", anim_steps)
 
@@ -1181,5 +1206,6 @@ anim_steps = make_umap_animation_data(
     gamma=16.0,
     negative_selection_range_denominator=128,
     init_scale=2.0,
+    include_initialization_steps=False,
 )
 np.save("fashion_mnist_umap_animation_steps_3.npy", anim_steps)

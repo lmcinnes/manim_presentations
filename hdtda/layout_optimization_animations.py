@@ -47,6 +47,20 @@ import types as _types
 
 apply_defaults()
 
+# ---------------------------------------------------------------------------
+# Resolution-independent pixel sizing for PMobject stroke_width.
+# Cairo's display_point_cloud uses stroke_width directly in pixels, so a
+# fixed pixel value looks larger at lower render resolutions.  _res_px()
+# scales a value that was tuned at _REF_PIXEL_HEIGHT to the current render
+# resolution, keeping the apparent visual size constant.
+# ---------------------------------------------------------------------------
+_REF_PIXEL_HEIGHT = 1440  # reference resolution stroke_width values are tuned for
+
+
+def _res_px(px_at_ref: float) -> float:
+    """Scale a pixel size tuned for _REF_PIXEL_HEIGHT to the current resolution."""
+    return px_at_ref * config.pixel_height / _REF_PIXEL_HEIGHT
+
 
 def _make_circular_nudges(thickness):
     """Pixel-nudge offsets forming a filled disc (round PMobject points)."""
@@ -162,7 +176,7 @@ def make_eff_res_embedding(data, labels):
 
     embedding = effective_resistance_distance_embedding(data, target_dim=2)
     embedding = _normalize_to_axes(embedding)
-    points = PMobject(stroke_width=1.0)
+    points = PMobject(stroke_width=_res_px(1.0))
     points.add_points(
         np.hstack([embedding, np.zeros((embedding.shape[0], 1))]), rgbas=rgba_colors
     )
@@ -186,11 +200,10 @@ def make_spectral_embedding(data, labels):
         n_components=2, affinity="precomputed"
     ).fit_transform(precomputed_knn)
     embedding = _normalize_to_axes(embedding)
-    points = PMobject(stroke_width=1.0)
+    points = PMobject(stroke_width=_res_px(1.0))
     points.add_points(
         np.hstack([embedding, np.zeros((embedding.shape[0], 1))]), rgbas=rgba_colors
     )
-    points.to_edge(LEFT).shift(DOWN * 1.5)
     return points
 
 
@@ -268,8 +281,8 @@ class _AnimatedUMAPOptimizationBase(TIMCSlide):
         # Initialize the PointCloud with per-point colors via add_points(rgbas=...).
         # PMobject.set_color() only accepts a single colour; per-point colours must
         # be supplied through the rgbas parameter of add_points().
-        STROKE_INITIAL = 6.0
-        STROKE_FINAL = 2.0
+        STROKE_INITIAL = _res_px(6.0)
+        STROKE_FINAL = _res_px(2.0)
         n_frames = len(umap_data)
         # Linearly fade stroke_width from STROKE_INITIAL → STROKE_FINAL over a
         # 50-frame window that ends exactly 500 frames before the last frame.
@@ -301,10 +314,20 @@ class _AnimatedUMAPOptimizationBase(TIMCSlide):
 
             # Smoothly interpolate stroke_width down to STROKE_FINAL over the
             # transition window [STROKE_FADE_START, STROKE_FADE_END].
-            t = (current_epoch - STROKE_FADE_START) / (
-                STROKE_FADE_END - STROKE_FADE_START
-            )
-            t = max(0.0, min(1.0, t))
+            if current_epoch <= 107 + 8:
+                t = 0.0
+            elif current_epoch <= 107 + 8 + 90 + 8:
+                t = 0.25
+            elif current_epoch <= 107 + 8 + 90 + 8 + 76 + 8:
+                t = 0.5
+            elif current_epoch <= 107 + 8 + 90 + 8 + 76 + 8 + 64 + 8:
+                t = 0.75
+            else:
+                t = 1.0
+            # t = (current_epoch - STROKE_FADE_START) / (
+            #     STROKE_FADE_END - STROKE_FADE_START
+            # )
+            # t = max(0.0, min(1.0, t))
             obj.stroke_width = STROKE_INITIAL + (STROKE_FINAL - STROKE_INITIAL) * t
 
         points.add_updater(update_points)
@@ -320,36 +343,114 @@ class _AnimatedUMAPOptimizationBase(TIMCSlide):
 
         if self._show_spectral:
 
+            # 1. Instantiate your new point cloud
             eff_res_points = make_eff_res_embedding(
                 self._load_base_data(), self._load_target_labels()
-            ).scale(2.0)
+            )
+
+            # 2. Define layout boundaries and margins
+            margin = 0.5  # Padding from screen edges
+            plot_buff = 0.8  # Space between the plots
+            title_gap = 1.0  # Space reserved at the top for titles
+
+            # Identify how many plots you are showing side-by-side (change to 3 if you add spectral)
+            num_plots = 2
+
+            # 3. Calculate available screen space
+            # We use the legend's left edge as our rightmost boundary
+            legend_left_x = legend.get_left()[0]
+
+            x_min = -config.frame_width / 2 + margin
+            x_max = legend_left_x - plot_buff
+
+            y_min = -config.frame_height / 2 + margin
+            y_max = config.frame_height / 2 - (margin + title_gap)
+
+            available_w = x_max - x_min
+            available_h = y_max - y_min
+
+            # 4. Calculate individual slot dimensions and centers
+            slot_w = (available_w - (plot_buff * (num_plots - 1))) / num_plots
+            slot_h = available_h
+            slot_y_center = (y_min + y_max) / 2
+
+            # Define centers for our slots from left to right
+            slot_centers = [
+                np.array(
+                    [x_min + slot_w / 2 + i * (slot_w + plot_buff), slot_y_center, 0]
+                )
+                for i in range(num_plots)
+            ]
+
+            # 5. Dynamically scale and position the objects
+            # --- Handle original points (goes to the right slot, index 1) ---
+            w_pts, h_pts = points.get_width(), points.get_height()
+            scale_pts = min(slot_w / w_pts, slot_h / h_pts) if w_pts and h_pts else 1.0
+
+            # --- Handle effective resistance points (goes to the left slot, index 0) ---
+            w_eff, h_eff = eff_res_points.get_width(), eff_res_points.get_height()
+            scale_eff = min(slot_w / w_eff, slot_h / h_eff) if w_eff and h_eff else 1.0
+
+            eff_res_points.scale(scale_eff).move_to(slot_centers[0])
+
+            # 6. Position the title relative to the newly positioned plot
             eff_res_title = Paragraph(
                 "Effective Resistance\nDistance Embedding",
                 font_size=16,
                 alignment="center",
-            ).next_to(eff_res_points, UP)
-            self.play(points.animate.scale(0.66).shift(RIGHT * 2.4), run_time=2)
-            self.play(PMFadeIn(eff_res_points), FadeIn(eff_res_title), run_time=2)
+            ).next_to(eff_res_points, UP, buff=0.3)
 
-            # spectral_points = make_spectral_embedding(
-            #     self._load_base_data(), self._load_target_labels()
-            # )
-            # spectral_title = Paragraph(
-            #     "Spectral\nEmbedding", font_size=16, alignment="center"
-            # ).next_to(spectral_points, DOWN)
-            # self.play(PMFadeIn(spectral_points), FadeIn(spectral_title), run_time=2)
+            # 7. Execute Animations
+            # Shrink and move the original points to its calculated target slot
+            self.play(
+                points.animate.scale(scale_pts).move_to(slot_centers[1]), run_time=2
+            )
+
+            # Fade in the new layout elements
+            self.play(PMFadeIn(eff_res_points), FadeIn(eff_res_title), run_time=2)
 
             self.marked_next_slide()
 
+            # Clean up
             self.play(
                 PMFadeOut(points),
                 FadeOut(legend),
                 PMFadeOut(eff_res_points),
                 FadeOut(eff_res_title),
-                # PMFadeOut(spectral_points),
-                # FadeOut(spectral_title),
                 run_time=2,
             )
+
+            # eff_res_points = make_eff_res_embedding(
+            #     self._load_base_data(), self._load_target_labels()
+            # ).scale(1.125)
+            # self.play(points.animate.scale(0.75).shift(RIGHT * 2.0), run_time=2)
+            # eff_res_points.next_to(points, LEFT, buff=1.5)
+            # eff_res_title = Paragraph(
+            #     "Effective Resistance\nDistance Embedding",
+            #     font_size=16,
+            #     alignment="center",
+            # ).next_to(eff_res_points, UP)
+            # self.play(PMFadeIn(eff_res_points), FadeIn(eff_res_title), run_time=2)
+
+            # # spectral_points = make_spectral_embedding(
+            # #     self._load_base_data(), self._load_target_labels()
+            # # )
+            # # spectral_title = Paragraph(
+            # #     "Spectral\nEmbedding", font_size=16, alignment="center"
+            # # ).next_to(spectral_points, DOWN)
+            # # self.play(PMFadeIn(spectral_points), FadeIn(spectral_title), run_time=2)
+
+            # self.marked_next_slide()
+
+            # self.play(
+            #     PMFadeOut(points),
+            #     FadeOut(legend),
+            #     PMFadeOut(eff_res_points),
+            #     FadeOut(eff_res_title),
+            #     # PMFadeOut(spectral_points),
+            #     # FadeOut(spectral_title),
+            #     run_time=2,
+            # )
         else:
             self.play(
                 PMFadeOut(points), FadeOut(legend), run_time=2

@@ -409,25 +409,25 @@ class FDComparisonToUMAP(TIMCSlide):
         self.wait()
         self.marked_next_slide()
 
-        self.clear_slide()
+        # self.clear_slide()
 
-        self.add_centered_text(
-            "We have a lot more flexibility with attraction and repulsion functions than just UMAP's specific choice",
-            max_width=0.66,
-            max_height=0.75,
-            font_size=48,
-        )
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
+        # self.add_centered_text(
+        #     "We have a lot more flexibility with attraction and repulsion functions than just UMAP's specific choice",
+        #     max_width=0.66,
+        #     max_height=0.75,
+        #     font_size=48,
+        # )
+        # self.wait()
+        # self.marked_next_slide()
+        # self.clear_slide()
 
 
 class EffectiveResistanceEmbeddingExplanation(TIMCSlide):
     def construct(self):
-        title = Text("Effective Resistance Embedding", font_size=56)
-        self.play(Write(title))
-        self.marked_next_slide()
-        self.play(FadeOut(title))
+        # title = Text("Effective Resistance Embedding", font_size=56)
+        # self.play(Write(title))
+        # self.marked_next_slide()
+        # self.play(FadeOut(title))
 
         # Show the formula for effective resistance in terms of the pseudoinverse of the Laplacian
         formula = MathTex(
@@ -476,15 +476,15 @@ class EffectiveResistanceEmbeddingExplanation(TIMCSlide):
         self.wait()
         self.marked_next_slide()
 
-        self.play(FadeOut(embedding_def))
+        # self.play(FadeOut(embedding_def))
 
-        self.add_centered_text(
-            "We want the (scaled) eigenvectors corresponding to the smallest nonzero eigenvalues",
-            max_width=0.75,
-        )
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
+        # self.add_centered_text(
+        #     "We want the (scaled) eigenvectors corresponding to the smallest nonzero eigenvalues",
+        #     max_width=0.75,
+        # )
+        # self.wait()
+        # self.marked_next_slide()
+        # self.clear_slide()
 
 
 class GeneralizedBetaPrimeDistribution(TIMCSlide):
@@ -504,27 +504,27 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         RATIO_SIZE = 64
         FRAC_BUFF = 0.12
 
-        dist_label = Text("Distance", font_size=RATIO_SIZE)
-        scale_label = Text("Scale", font_size=RATIO_SIZE)
-        bar_w_init = max(dist_label.width, scale_label.width) + 0.5
+        dist_label = Text("Volume", font_size=RATIO_SIZE)
+        density_label = Text("Density", font_size=RATIO_SIZE)
+        bar_w_init = max(dist_label.width, density_label.width) + 0.5
         init_bar = Line(LEFT * bar_w_init / 2, RIGHT * bar_w_init / 2, stroke_width=2)
-        VGroup(dist_label, init_bar, scale_label).arrange(DOWN, buff=FRAC_BUFF).move_to(
-            ORIGIN
-        )
+        VGroup(dist_label, init_bar, density_label).arrange(
+            DOWN, buff=FRAC_BUFF
+        ).move_to(ORIGIN)
 
-        self.play(FadeIn(dist_label), Create(init_bar), FadeIn(scale_label))
+        self.play(FadeIn(dist_label), Create(init_bar), FadeIn(density_label))
         self.wait()
         self.marked_next_slide()
 
         # Build the full target layout to get precise final positions
-        dist_label_t = Text("Distance", font_size=RATIO_SIZE)
+        dist_label_t = Text("Volume", font_size=RATIO_SIZE)
         gamma_num = Text(
             " (Gamma distributed)",
             font_size=RATIO_SIZE,
             color=ACCENT_COLOR,
             stroke_color=ACCENT_COLOR,
         )
-        scale_label_t = Text("Scale", font_size=RATIO_SIZE)
+        density_label_t = Text("Density", font_size=RATIO_SIZE)
         gamma_den = Text(
             " (Gamma distributed)",
             font_size=RATIO_SIZE,
@@ -533,7 +533,7 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         )
 
         num_row = VGroup(dist_label_t, gamma_num).arrange(RIGHT, buff=0.2)
-        den_row = VGroup(scale_label_t, gamma_den).arrange(RIGHT, buff=0.2)
+        den_row = VGroup(density_label_t, gamma_den).arrange(RIGHT, buff=0.2)
         bar_w_final = max(num_row.width, den_row.width) + 0.5
         final_bar = Line(
             LEFT * bar_w_final / 2, RIGHT * bar_w_final / 2, stroke_width=2
@@ -546,7 +546,7 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
             LaggedStart(
                 AnimationGroup(
                     ReplacementTransform(dist_label, dist_label_t),
-                    ReplacementTransform(scale_label, scale_label_t),
+                    ReplacementTransform(density_label, density_label_t),
                     Transform(init_bar, final_bar),
                 ),
                 AnimationGroup(
@@ -723,7 +723,7 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         self.wait()
         self.marked_next_slide()
 
-        self.clear_slide()
+        # self.clear_slide()
 
 
 class DamrichHDPersistentHomologyPaper(TIMCSlide):
@@ -783,7 +783,7 @@ class DamrichHDPersistentHomologyPaper(TIMCSlide):
         self.wait()
         self.marked_next_slide()
 
-        self.clear_slide()
+        # self.clear_slide()
 
 
 class WhatMakesItWork(TIMCSlide):
@@ -827,13 +827,13 @@ class WhatMakesItWork(TIMCSlide):
 class GradientOfLoss(TIMCSlide):
     def construct(self):
 
-        self.add_centered_text(
-            "Gradient of the loss function\nis a force field",
-            font_size=56,
-        )
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
+        # self.add_centered_text(
+        #     "Gradient of the loss function\nis a force field",
+        #     font_size=56,
+        # )
+        # self.wait()
+        # self.marked_next_slide()
+        # self.clear_slide()
 
         # Show the formula for the loss function
         loss_formula = MathTex(
@@ -966,19 +966,19 @@ class GradientOfLoss(TIMCSlide):
 
         self.wait()
         self.marked_next_slide()
-        self.clear_slide()
+        # self.clear_slide()
 
-        self.add_centered_text(
-            "The relative shapes of the derivatives of the attraction and repulsion functions control the geometry of the embedding",
-            max_width=0.75,
-            max_height=0.66,
-            font_size=56,
-            t2c={"relative shapes": ACCENT_COLOR},
-        )
+        # self.add_centered_text(
+        #     "The relative shapes of the derivatives of the attraction and repulsion functions control the geometry of the embedding",
+        #     max_width=0.75,
+        #     max_height=0.66,
+        #     font_size=56,
+        #     t2c={"relative shapes": ACCENT_COLOR},
+        # )
 
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
+        # # self.wait()
+        # # self.marked_next_slide()
+        # # self.clear_slide()
 
 
 class Intro(TIMCSlide):

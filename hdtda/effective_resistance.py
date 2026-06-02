@@ -427,14 +427,17 @@ class EffectiveResistanceCommute(TIMCSlide):
         self.play(ChangeDecimalToValue(counter_val, rolling_avg / n_edges_full))
         self.marked_next_slide()
 
-        for k in range(16):
+        MIN_RT = 4 / 30  # ≥4 frames at 30fps — avoids the 3-frame H.264 B-frame zone
+        # 3-frame clips have dts=[-1024,-512,0] which the concat demuxer fails to
+        # normalise; 2-frame clips (no B-frames) and 4+-frame clips both work fine.
+        for k in range(24):
             walk = self._round_trip(IDX_S, IDX_T, adj_full, rng)
             self._animate_walk_medium(
                 walk,
                 positions,
                 walk_dot,
-                run_time=4.0 / (k + 1),
-                fade_run_time=1.0 / np.sqrt(k + 1),
+                run_time=max(2.0 / (k + 1), MIN_RT),
+                fade_run_time=max(0.5 / np.sqrt(k + 1), MIN_RT),
             )
 
             commute_steps.append(len(walk) - 1)
@@ -442,7 +445,7 @@ class EffectiveResistanceCommute(TIMCSlide):
             self.play(
                 ChangeDecimalToValue(path_val, commute_steps[-1]),
                 ChangeDecimalToValue(counter_val, rolling_avg / n_edges_full),
-                run_time=1.0 / np.sqrt(k + 1),
+                run_time=max(1.0 / np.sqrt(k + 1), MIN_RT),
             )
         self.play(FadeOut(walk_dot))
 
@@ -492,14 +495,14 @@ class EffectiveResistanceCommute(TIMCSlide):
                 if c == 1 and r != 1:
                     edges_to_prune.append(key)
 
-        # Also prune the direct horizontal edges cols 0→1 (rows 0 and 3)
-        # so that the bridge is the dominant bottleneck.
-        extra_prune = [
-            (self._node_index(0, 0), self._node_index(0, 1)),
-            (self._node_index(2, 0), self._node_index(2, 1)),
-        ]
-        for ep in extra_prune:
-            edges_to_prune.append(ep)
+        # # Also prune the direct horizontal edges cols 0→1 (rows 0 and 3)
+        # # so that the bridge is the dominant bottleneck.
+        # extra_prune = [
+        #     (self._node_index(0, 0), self._node_index(0, 1)),
+        #     (self._node_index(2, 0), self._node_index(2, 1)),
+        # ]
+        # for ep in extra_prune:
+        #     edges_to_prune.append(ep)
 
         # Deduplicate
         edges_to_prune = list({(min(a, b), max(a, b)) for a, b in edges_to_prune})
@@ -563,22 +566,21 @@ class EffectiveResistanceCommute(TIMCSlide):
         self.play(ChangeDecimalToValue(counter_val, rolling_avg_bot / n_edges_pruned))
         self.marked_next_slide()
 
-        for k in range(16):
+        for k in range(24):
             walk = self._round_trip(IDX_S, IDX_T, adj_pruned, rng)
+            commute_steps_bot.append(len(walk) - 1)
+            rolling_avg_bot = np.mean(commute_steps_bot)
             self._animate_walk_medium(
                 walk,
                 positions,
                 walk_dot2,
-                run_time=4.0 / (k + 1),
-                fade_run_time=1.0 / np.sqrt(k + 1),
+                run_time=max(2.0 / (k + 1), MIN_RT),
+                fade_run_time=max(0.5 / np.sqrt(k + 1), MIN_RT),
             )
-
-            commute_steps_bot.append(len(walk) - 1)
-            rolling_avg_bot = np.mean(commute_steps_bot)
-            self.play(ChangeDecimalToValue(path_val, commute_steps_bot[-1]))
             self.play(
+                ChangeDecimalToValue(path_val, commute_steps_bot[-1]),
                 ChangeDecimalToValue(counter_val, rolling_avg_bot / n_edges_pruned),
-                run_time=1.0 / np.sqrt(k + 1),
+                run_time=max(0.75 / np.sqrt(k + 1), MIN_RT),
             )
 
         self.marked_next_slide()
@@ -665,7 +667,7 @@ class EffectiveResistanceCommute(TIMCSlide):
         self.marked_next_slide()
 
         self.play(Write(reff_form))
-        self.play(Write(commute_form), Create(commute_box))
+        self.play(Write(commute_form))
         self.marked_next_slide()
 
 
@@ -904,4 +906,57 @@ class ElectricResistanceGrid(TIMCSlide):
             i_tgt.animate.set_color(pcol(pot2[node_idx[target]])),
             ChangeDecimalToValue(reff_num, R2),
         )
+        self.marked_next_slide()
+
+
+class VonLuxburgCorrection(TIMCSlide):
+
+    def construct(self):
+        eff_res = MathTex(
+            r"R_{\mathrm{eff}}(i,j) \;=\; "
+            r"(\mathbf{e}_i - \mathbf{e}_j)^\top \, L^+ \, (\mathbf{e}_i - \mathbf{e}_j)",
+            font_size=56,
+        )
+        self.play(Write(eff_res))
+        self.marked_next_slide()
+
+        citation = (
+            VGroup(
+                Text(
+                    "Von Luxburg, Radl, Hein (2014)",
+                    font_size=28,
+                ),
+                Text(
+                    "Hitting and Commute Times in Large Random Neighborhood Graphs",
+                    font_size=28,
+                ),
+            )
+            .arrange(DOWN, buff=0.1)
+            .to_edge(DOWN, buff=0.5)
+        )
+        limit_result = MathTex(
+            r"R_{\mathrm{eff}}(i,j) \;\to\; "
+            r"\frac{1}{d_i} + \frac{1}{d_j} \qquad \text{as } n \to \infty",
+            font_size=56,
+        ).shift(DOWN * 0.75)
+
+        self.play(
+            LaggedStart(
+                eff_res.animate.shift(UP * 0.75),
+                Write(limit_result),
+                FadeIn(citation, shift=UP * 0.15),
+                lag_ratio=0.12,
+                run_time=1.8,
+            )
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        self.clear_slide()
+        eff_res = MathTex(
+            r"R_{\mathrm{eff-corr}}(i,j) \;:=\; "
+            r"(\mathbf{e}_i - \mathbf{e}_j)^\top \, L^+ \, (\mathbf{e}_i - \mathbf{e}_j) - \left(\frac{1}{d_i} + \frac{1}{d_j}\right)",
+            font_size=48,
+        )
+        self.play(Write(eff_res))
         self.marked_next_slide()

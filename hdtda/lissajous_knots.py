@@ -36,6 +36,21 @@ from manim_slides import Slide, ThreeDSlide
 apply_defaults()
 
 # ---------------------------------------------------------------------------
+# Resolution-independent pixel sizing for PMobject stroke_width.
+# Cairo's display_point_cloud uses stroke_width directly in pixels, so a
+# fixed pixel value looks larger at lower render resolutions.  _res_px()
+# scales a value that was tuned at _REF_PIXEL_HEIGHT to the current render
+# resolution, keeping the apparent visual size constant.
+# ---------------------------------------------------------------------------
+_REF_PIXEL_HEIGHT = 1440  # reference resolution stroke_width values are tuned for
+
+
+def _res_px(px_at_ref: float) -> float:
+    """Scale a pixel size tuned for _REF_PIXEL_HEIGHT to the current resolution."""
+    return px_at_ref * config.pixel_height / _REF_PIXEL_HEIGHT
+
+
+# ---------------------------------------------------------------------------
 # Helpers shared by the Lissajous knot base classes
 # ---------------------------------------------------------------------------
 import itertools as _it
@@ -132,6 +147,262 @@ class PMFadeIn(Animation):
 
 
 # ---------------------------------------------------------------------------
+# Introductory scene: parametric form → 2D projections → 3D knot → high-D
+# ---------------------------------------------------------------------------
+class LissajousKnotIntroduction(ThreeDTIMCSlide):
+    """
+    Two-part introduction to Lissajous knots.
+
+    Part 1: Parametric equations, three 2D projections in the top half, arrows
+            pointing down to a rotating 3D curve in the bottom half.
+    Part 2: Extension to higher dimensions – generalised formula and all
+            plane-pair projections for a 4D example.
+    """
+
+    _n_3d = (3, 5, 7)
+    _phases_3d = (0.1, 0.7, 0)
+    _n_hd = (2, 3, 5, 7)
+    _phases_hd = (0.0, PI / 4, PI / 2, 3 * PI / 4)
+    _n_points = 1000
+    _rotation_time = 12.0
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _curve_data(self, ns, phases):
+        """Return an (d, N) array of cosine components."""
+        t = np.linspace(0, 2 * PI, self._n_points)
+        return np.array([np.cos(n * t + p) for n, p in zip(ns, phases)])
+
+    def _projection_plot(self, data, i, j, dim_names, size=1.8, n_colors=64):
+        """Small Axes with the (i, j) projection of *data* and axis labels."""
+        ax = Axes(
+            x_range=[-1.2, 1.2, 1],
+            y_range=[-1.2, 1.2, 1],
+            x_length=size,
+            y_length=size,
+            axis_config={
+                "include_tip": False,
+                "color": DEFAULT_COLOR,
+                "stroke_width": 1.5,
+            },
+        )
+        coords = np.array([ax.c2p(x, y) for x, y in zip(data[i], data[j])])
+        n = len(coords)
+        curve = VGroup()
+        for k in range(n_colors):
+            start_idx = int(k * n / n_colors)
+            end_idx = min(int((k + 1) * n / n_colors) + 1, n)
+            t_mid = k / max(n_colors - 1, 1)
+            color = colorcet.CET_C9[int(t_mid * (len(colorcet.CET_C9) - 1))]
+            seg = VMobject(stroke_width=2.5, color=color)
+            seg.set_points_smoothly(coords[start_idx:end_idx])
+            curve.add(seg)
+        x_lbl = MathTex(dim_names[i], font_size=22, color=DEFAULT_COLOR)
+        x_lbl.next_to(ax, DOWN, buff=0.15)
+        y_lbl = MathTex(dim_names[j], font_size=22, color=DEFAULT_COLOR)
+        y_lbl.next_to(ax, LEFT, buff=0.15)
+        return VGroup(ax, curve, x_lbl, y_lbl)
+
+    # ------------------------------------------------------------------
+    # construct
+    # ------------------------------------------------------------------
+
+    def construct(self):
+        self._part1()
+        self.marked_next_slide()
+        self.clear_slide()
+        self._part2()
+        self.marked_next_slide()
+
+    # ------------------------------------------------------------------
+    # Part 1 – parametric form + 2D projections + rotating 3D knot
+    # ------------------------------------------------------------------
+
+    def _part1(self):
+        nx, ny, nz = self._n_3d
+        phi_x, phi_y, phi_z = self._phases_3d
+        data = self._curve_data(self._n_3d, self._phases_3d)
+
+        # Parametric equations at the top (fixed-in-frame)
+        title = Text("Lissajous knots", font_size=56).shift(UP * 1.5)
+        eq = MathTex(
+            r"x = \cos(n_x t + \phi_x)\\"
+            r"y = \cos(n_y t + \phi_y)\\"
+            r"z = \cos(n_z t + \phi_z)",
+            font_size=56,
+        ).next_to(title, DOWN, buff=0.5)
+        self.play(Write(title))
+        self.play(Write(eq))
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        # Three 2D projection plots arranged across the upper half
+        dim_names_3d = ["x", "y", "z"]
+        plot_xy = self._projection_plot(data, 0, 1, dim_names_3d)
+        plot_xz = self._projection_plot(data, 0, 2, dim_names_3d)
+        plot_yz = self._projection_plot(data, 1, 2, dim_names_3d)
+        plots = VGroup(plot_xy, plot_xz, plot_yz).arrange(RIGHT, buff=1.0)
+
+        self.play(
+            LaggedStart(*[Create(p[0]) for p in plots], lag_ratio=0.5),
+            LaggedStart(*[Write(p[2:]) for p in plots], lag_ratio=0.5),
+        )
+        self.play(
+            LaggedStart(*[Create(p[1], run_time=2) for p in plots], lag_ratio=0.5)
+        )
+
+        self.wait()
+
+        # Shift plots to top edge, then pin them as screen-space overlays
+        # before the camera tilts so their positions are preserved correctly.
+        self.play(plots.animate.to_edge(UP, buff=0.5))
+
+        # Build the 3D axes first so we know where the origin lands in
+        # screen space – we'll point the arrows precisely at it.
+        axes_3d = ThreeDAxes(
+            x_range=[-1.2, 1.2],
+            y_range=[-1.2, 1.2],
+            z_range=[-1.2, 1.2],
+            x_length=3.5,
+            y_length=3.5,
+            z_length=3.5,
+        )
+        axes_3d.shift(DOWN * 1.8)
+        origin_3d = axes_3d.get_origin()
+
+        # Arcing arrows from each projection plot down to the 3D axes origin.
+        # Each arrow stops `arrow_gap` units short of the origin so it doesn't
+        # impinge on the 3D plot region. Positive angle arcs CCW, negative CW.
+        # arrow_angles = [PI / 4, PI / 12, -PI / 4]
+        arrow_angles = [PI / 4, 0, -PI / 4]
+        arrow_gaps = [2.5, 2.0, 2.5]
+        arrows = VGroup()
+        for p, a, arrow_gap in zip(
+            [plot_xy, plot_xz, plot_yz], arrow_angles, arrow_gaps
+        ):
+            start = p.get_bottom() + 0.1 * RIGHT + DOWN * 0.1
+            direction = origin_3d - start
+            direction = direction / np.linalg.norm(direction)
+            end = origin_3d - direction * arrow_gap
+            arrows.add(
+                CurvedArrow(
+                    start,
+                    end,
+                    angle=a,
+                    color=ACCENT_COLOR,
+                    stroke_width=8,
+                    tip_length=0.2,
+                )
+            )
+        self.play(*[Create(a) for a in arrows])
+
+        # 3D knot coloured by parameter t using CET_C9
+        n_seg = 64
+        curve_3d = VGroup()
+        for k in range(n_seg):
+            t_start = 2 * PI * k / n_seg
+            t_end = 2 * PI * (k + 1) / n_seg
+            t_mid = (k + 0.5) / n_seg
+            seg_color = colorcet.CET_C9[int(t_mid * (len(colorcet.CET_C9) - 1))]
+            seg = ParametricFunction(
+                lambda t, _nx=nx, _ny=ny, _nz=nz, _px=phi_x, _py=phi_y, _pz=phi_z: axes_3d.c2p(
+                    np.cos(_nx * t + _px),
+                    np.cos(_ny * t + _py),
+                    np.cos(_nz * t + _pz),
+                ),
+                t_range=[t_start, t_end],
+                color=seg_color,
+                stroke_width=6,
+            )
+            curve_3d.add(seg)
+        self.play(Create(axes_3d), Create(curve_3d), run_time=3)
+
+        self.wait()
+
+        self.play(
+            Rotating(
+                axes_3d,
+                axis=UP,
+                about_point=axes_3d.get_center(),
+                run_time=self._rotation_time,
+            ),
+            Rotating(
+                curve_3d,
+                axis=UP,
+                about_point=axes_3d.get_center(),
+                run_time=self._rotation_time,
+            ),
+        )
+
+        # # Rotate the object group rather than the camera so the screen-space
+        # # overlays above are completely undisturbed.
+        # knot_group = VGroup(axes_3d, curve_3d)
+        # knot_group.add_updater(
+        #     lambda m, dt: m.rotate(dt * 0.5, axis=UP, about_point=m.get_center())
+        # )
+        # self.wait(self._rotation_time)
+        # knot_group.clear_updaters()
+
+    # ------------------------------------------------------------------
+    # Part 2 – higher-dimensional extension
+    # ------------------------------------------------------------------
+
+    def _part2(self):
+
+        nd = len(self._n_hd)
+        n_vals_str = ", ".join(str(n) for n in self._n_hd)
+
+        title = Text("Higher-dimensional extension", font_size=56).shift(UP)
+        eq = MathTex(
+            r"x_i = \cos(n_i\, t + \phi_i), \quad i = 1, \ldots, d",
+            font_size=72,
+        ).next_to(title, DOWN, buff=0.5)
+        self.play(Write(title))
+        self.play(Write(eq))
+        self.wait()
+        self.marked_next_slide()
+        self.clear_slide()
+
+        example_title = Text(f"Example in {nd}D", font_size=56).shift(UP)
+        note = VGroup(
+            example_title,
+            Text(
+                f"n = ({n_vals_str})  — all pairwise coprime",
+                font_size=48,
+            ).next_to(example_title, DOWN, buff=0.25),
+        )
+        self.play(Write(note))
+        self.wait()
+        self.play(note.animate.to_edge(UP, buff=0.5))
+
+        # All C(d, 2) = 6 plane-pair projections for the 4D example
+        data = self._curve_data(self._n_hd, self._phases_hd)
+        dim_names_hd = [f"x_{{{i + 1}}}" for i in range(nd)]
+        pairs = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+        all_plots = VGroup(
+            *[
+                self._projection_plot(data, i, j, dim_names_hd, size=1.5)
+                for i, j in pairs
+            ]
+        )
+        row1 = VGroup(*list(all_plots)[:3]).arrange(RIGHT, buff=0.6)
+        row2 = VGroup(*list(all_plots)[3:]).arrange(RIGHT, buff=0.6)
+        grid = VGroup(row1, row2).arrange(DOWN, buff=0.5)
+        grid.next_to(note, DOWN, buff=0.5)
+        self.play(
+            LaggedStart(*[Create(p[0]) for p in all_plots], lag_ratio=0.5),
+            LaggedStart(*[Write(p[2:]) for p in all_plots], lag_ratio=0.5),
+        )
+        self.play(
+            LaggedStart(*[Create(p[1], run_time=2) for p in all_plots], lag_ratio=0.5)
+        )
+        self.wait(1)
+
+
+# ---------------------------------------------------------------------------
 # Cairo base class
 # ---------------------------------------------------------------------------
 
@@ -192,10 +463,10 @@ class _LissajousBase(ThreeDTIMCSlide):
         self.stop_ambient_camera_rotation()
 
         self.marked_next_slide()
-        self.begin_ambient_camera_rotation(rate=4 * PI / self._rotation_wait)
-        self.wait(self._rotation_wait / 2)
-        self.stop_ambient_camera_rotation()
-        self.marked_next_slide()
+        # self.begin_ambient_camera_rotation(rate=4 * PI / self._rotation_wait)
+        # self.wait(self._rotation_wait / 2)
+        # self.stop_ambient_camera_rotation()
+        # self.marked_next_slide()
 
         self.play(PMFadeOut(points), FadeOut(axes))
         self.clear_slide()
@@ -266,10 +537,10 @@ class _LissajousBase(ThreeDTIMCSlide):
         self.stop_ambient_camera_rotation()
 
         self.marked_next_slide()
-        self.begin_ambient_camera_rotation(rate=4 * PI / self._rotation_wait)
-        self.wait(self._rotation_wait / 2)
-        self.stop_ambient_camera_rotation()
-        self.marked_next_slide()
+        # self.begin_ambient_camera_rotation(rate=4 * PI / self._rotation_wait)
+        # self.wait(self._rotation_wait / 2)
+        # self.stop_ambient_camera_rotation()
+        # self.marked_next_slide()
 
         self.play(PMFadeOut(pm), FadeOut(axes))
         self.clear_slide()
@@ -288,7 +559,7 @@ class _LissajousBase(ThreeDTIMCSlide):
                 for t in ts
             ]
         )
-        pm = PMobject(stroke_width=self._stroke_width)
+        pm = PMobject(stroke_width=_res_px(self._stroke_width))
         pm.add_points(coords, rgbas=rgbas)
         return pm
 
@@ -621,264 +892,6 @@ class HardHighDLissajousEffRes5D(_LissajousBase):
         return _normalize_to_axes(result)
 
 
-# ---------------------------------------------------------------------------
-# Introductory scene: parametric form → 2D projections → 3D knot → high-D
-# ---------------------------------------------------------------------------
-
-
-class LissajousKnotIntroduction(ThreeDTIMCSlide):
-    """
-    Two-part introduction to Lissajous knots.
-
-    Part 1: Parametric equations, three 2D projections in the top half, arrows
-            pointing down to a rotating 3D curve in the bottom half.
-    Part 2: Extension to higher dimensions – generalised formula and all
-            plane-pair projections for a 4D example.
-    """
-
-    _n_3d = (3, 5, 7)
-    _phases_3d = (0.1, 0.7, 0)
-    _n_hd = (2, 3, 5, 7)
-    _phases_hd = (0.0, PI / 4, PI / 2, 3 * PI / 4)
-    _n_points = 1000
-    _rotation_time = 12.0
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _curve_data(self, ns, phases):
-        """Return an (d, N) array of cosine components."""
-        t = np.linspace(0, 2 * PI, self._n_points)
-        return np.array([np.cos(n * t + p) for n, p in zip(ns, phases)])
-
-    def _projection_plot(self, data, i, j, dim_names, size=1.8, n_colors=64):
-        """Small Axes with the (i, j) projection of *data* and axis labels."""
-        ax = Axes(
-            x_range=[-1.2, 1.2, 1],
-            y_range=[-1.2, 1.2, 1],
-            x_length=size,
-            y_length=size,
-            axis_config={
-                "include_tip": False,
-                "color": DEFAULT_COLOR,
-                "stroke_width": 1.5,
-            },
-        )
-        coords = np.array([ax.c2p(x, y) for x, y in zip(data[i], data[j])])
-        n = len(coords)
-        curve = VGroup()
-        for k in range(n_colors):
-            start_idx = int(k * n / n_colors)
-            end_idx = min(int((k + 1) * n / n_colors) + 1, n)
-            t_mid = k / max(n_colors - 1, 1)
-            color = colorcet.CET_C9[int(t_mid * (len(colorcet.CET_C9) - 1))]
-            seg = VMobject(stroke_width=2.5, color=color)
-            seg.set_points_smoothly(coords[start_idx:end_idx])
-            curve.add(seg)
-        x_lbl = MathTex(dim_names[i], font_size=22, color=DEFAULT_COLOR)
-        x_lbl.next_to(ax, DOWN, buff=0.15)
-        y_lbl = MathTex(dim_names[j], font_size=22, color=DEFAULT_COLOR)
-        y_lbl.next_to(ax, LEFT, buff=0.15)
-        return VGroup(ax, curve, x_lbl, y_lbl)
-
-    # ------------------------------------------------------------------
-    # construct
-    # ------------------------------------------------------------------
-
-    def construct(self):
-        self._part1()
-        self.marked_next_slide()
-        self.clear_slide()
-        self._part2()
-        self.marked_next_slide()
-
-    # ------------------------------------------------------------------
-    # Part 1 – parametric form + 2D projections + rotating 3D knot
-    # ------------------------------------------------------------------
-
-    def _part1(self):
-        nx, ny, nz = self._n_3d
-        phi_x, phi_y, phi_z = self._phases_3d
-        data = self._curve_data(self._n_3d, self._phases_3d)
-
-        # Parametric equations at the top (fixed-in-frame)
-        title = Text("Lissajous knots", font_size=56).shift(UP * 1.5)
-        eq = MathTex(
-            r"x = \cos(n_x t + \phi_x)\\"
-            r"y = \cos(n_y t + \phi_y)\\"
-            r"z = \cos(n_z t + \phi_z)",
-            font_size=56,
-        ).next_to(title, DOWN, buff=0.5)
-        self.play(Write(title))
-        self.play(Write(eq))
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
-
-        # Three 2D projection plots arranged across the upper half
-        dim_names_3d = ["x", "y", "z"]
-        plot_xy = self._projection_plot(data, 0, 1, dim_names_3d)
-        plot_xz = self._projection_plot(data, 0, 2, dim_names_3d)
-        plot_yz = self._projection_plot(data, 1, 2, dim_names_3d)
-        plots = VGroup(plot_xy, plot_xz, plot_yz).arrange(RIGHT, buff=1.0)
-
-        self.play(
-            LaggedStart(*[Create(p[0]) for p in plots], lag_ratio=0.5),
-            LaggedStart(*[Write(p[2:]) for p in plots], lag_ratio=0.5),
-        )
-        self.play(
-            LaggedStart(*[Create(p[1], run_time=2) for p in plots], lag_ratio=0.5)
-        )
-
-        self.wait()
-
-        # Shift plots to top edge, then pin them as screen-space overlays
-        # before the camera tilts so their positions are preserved correctly.
-        self.play(plots.animate.to_edge(UP, buff=0.5))
-
-        # Build the 3D axes first so we know where the origin lands in
-        # screen space – we'll point the arrows precisely at it.
-        axes_3d = ThreeDAxes(
-            x_range=[-1.2, 1.2],
-            y_range=[-1.2, 1.2],
-            z_range=[-1.2, 1.2],
-            x_length=3.5,
-            y_length=3.5,
-            z_length=3.5,
-        )
-        axes_3d.shift(DOWN * 1.8)
-        origin_3d = axes_3d.get_origin()
-
-        # Arcing arrows from each projection plot down to the 3D axes origin.
-        # Each arrow stops `arrow_gap` units short of the origin so it doesn't
-        # impinge on the 3D plot region. Positive angle arcs CCW, negative CW.
-        # arrow_angles = [PI / 4, PI / 12, -PI / 4]
-        arrow_angles = [PI / 4, 0, -PI / 4]
-        arrow_gaps = [2.5, 2.0, 2.5]
-        arrows = VGroup()
-        for p, a, arrow_gap in zip(
-            [plot_xy, plot_xz, plot_yz], arrow_angles, arrow_gaps
-        ):
-            start = p.get_bottom() + 0.1 * RIGHT + DOWN * 0.1
-            direction = origin_3d - start
-            direction = direction / np.linalg.norm(direction)
-            end = origin_3d - direction * arrow_gap
-            arrows.add(
-                CurvedArrow(
-                    start,
-                    end,
-                    angle=a,
-                    color=ACCENT_COLOR,
-                    stroke_width=8,
-                    tip_length=0.2,
-                )
-            )
-        self.play(*[Create(a) for a in arrows])
-
-        # 3D knot coloured by parameter t using CET_C9
-        n_seg = 64
-        curve_3d = VGroup()
-        for k in range(n_seg):
-            t_start = 2 * PI * k / n_seg
-            t_end = 2 * PI * (k + 1) / n_seg
-            t_mid = (k + 0.5) / n_seg
-            seg_color = colorcet.CET_C9[int(t_mid * (len(colorcet.CET_C9) - 1))]
-            seg = ParametricFunction(
-                lambda t, _nx=nx, _ny=ny, _nz=nz, _px=phi_x, _py=phi_y, _pz=phi_z: axes_3d.c2p(
-                    np.cos(_nx * t + _px),
-                    np.cos(_ny * t + _py),
-                    np.cos(_nz * t + _pz),
-                ),
-                t_range=[t_start, t_end],
-                color=seg_color,
-                stroke_width=6,
-            )
-            curve_3d.add(seg)
-        self.play(Create(axes_3d), Create(curve_3d), run_time=3)
-
-        self.wait()
-
-        self.play(
-            Rotating(
-                axes_3d,
-                axis=UP,
-                about_point=axes_3d.get_center(),
-                run_time=self._rotation_time,
-            ),
-            Rotating(
-                curve_3d,
-                axis=UP,
-                about_point=axes_3d.get_center(),
-                run_time=self._rotation_time,
-            ),
-        )
-
-        # # Rotate the object group rather than the camera so the screen-space
-        # # overlays above are completely undisturbed.
-        # knot_group = VGroup(axes_3d, curve_3d)
-        # knot_group.add_updater(
-        #     lambda m, dt: m.rotate(dt * 0.5, axis=UP, about_point=m.get_center())
-        # )
-        # self.wait(self._rotation_time)
-        # knot_group.clear_updaters()
-
-    # ------------------------------------------------------------------
-    # Part 2 – higher-dimensional extension
-    # ------------------------------------------------------------------
-
-    def _part2(self):
-
-        nd = len(self._n_hd)
-        n_vals_str = ", ".join(str(n) for n in self._n_hd)
-
-        title = Text("Higher-dimensional extension", font_size=56).shift(UP)
-        eq = MathTex(
-            r"x_i = \cos(n_i\, t + \phi_i), \quad i = 1, \ldots, d",
-            font_size=72,
-        ).next_to(title, DOWN, buff=0.5)
-        self.play(Write(title))
-        self.play(Write(eq))
-        self.wait()
-        self.marked_next_slide()
-        self.clear_slide()
-
-        example_title = Text(f"Example in {nd}D", font_size=56).shift(UP)
-        note = VGroup(
-            example_title,
-            Text(
-                f"n = ({n_vals_str})  — all pairwise coprime",
-                font_size=48,
-            ).next_to(example_title, DOWN, buff=0.25),
-        )
-        self.play(Write(note))
-        self.wait()
-        self.play(note.animate.to_edge(UP, buff=0.5))
-
-        # All C(d, 2) = 6 plane-pair projections for the 4D example
-        data = self._curve_data(self._n_hd, self._phases_hd)
-        dim_names_hd = [f"x_{{{i + 1}}}" for i in range(nd)]
-        pairs = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
-        all_plots = VGroup(
-            *[
-                self._projection_plot(data, i, j, dim_names_hd, size=1.5)
-                for i, j in pairs
-            ]
-        )
-        row1 = VGroup(*list(all_plots)[:3]).arrange(RIGHT, buff=0.6)
-        row2 = VGroup(*list(all_plots)[3:]).arrange(RIGHT, buff=0.6)
-        grid = VGroup(row1, row2).arrange(DOWN, buff=0.5)
-        grid.next_to(note, DOWN, buff=0.5)
-        self.play(
-            LaggedStart(*[Create(p[0]) for p in all_plots], lag_ratio=0.5),
-            LaggedStart(*[Write(p[2:]) for p in all_plots], lag_ratio=0.5),
-        )
-        self.play(
-            LaggedStart(*[Create(p[1], run_time=2) for p in all_plots], lag_ratio=0.5)
-        )
-        self.wait(1)
-
-
 class HighDLissajousKnotUMAP2DWithEdges(TIMCSlide):
 
     _n_samples = 2000
@@ -1011,7 +1024,7 @@ class HighDLissajousKnotUMAP2DWithEdges(TIMCSlide):
                 for t in ts
             ]
         )
-        pm = PMobject(stroke_width=self._stroke_width)
+        pm = PMobject(stroke_width=_res_px(self._stroke_width))
         pm.add_points(coords, rgbas=rgbas)
         return pm
 
