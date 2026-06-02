@@ -496,6 +496,7 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         self.add_centered_text(
             "A probability distribution of a ratio of two Gamma-distributed variables",
             max_width=0.5,
+            font_size=48,
         )
         self.marked_next_slide()
         self.clear_slide()
