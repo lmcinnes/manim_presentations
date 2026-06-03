@@ -289,7 +289,7 @@ class _AnimatedUMAPOptimizationBase(TIMCSlide):
         STROKE_FADE_END = n_frames - 500
         STROKE_FADE_START = STROKE_FADE_END - 50
 
-        points = PMobject(stroke_width=STROKE_INITIAL)
+        points = PMobject(stroke_width=STROKE_INITIAL if self._show_init else STROKE_FINAL)
         points.add_points(_to_manim(umap_data[0]), rgbas=rgba_colors)
         # self.add(points)
         self.play(PMFadeIn(points), FadeIn(legend), run_time=2)
@@ -312,23 +312,26 @@ class _AnimatedUMAPOptimizationBase(TIMCSlide):
                 new_pos = umap_data[-1]
             obj.set_points(_to_manim(new_pos))
 
-            # Smoothly interpolate stroke_width down to STROKE_FINAL over the
-            # transition window [STROKE_FADE_START, STROKE_FADE_END].
-            if current_epoch <= 107 + 8:
-                t = 0.0
-            elif current_epoch <= 107 + 8 + 90 + 8:
-                t = 0.25
-            elif current_epoch <= 107 + 8 + 90 + 8 + 76 + 8:
-                t = 0.5
-            elif current_epoch <= 107 + 8 + 90 + 8 + 76 + 8 + 64 + 8:
-                t = 0.75
+            if self._show_init:
+                # Smoothly interpolate stroke_width down to STROKE_FINAL over the
+                # transition window [STROKE_FADE_START, STROKE_FADE_END].
+                if current_epoch <= 107 + 8:
+                    t = 0.0
+                elif current_epoch <= 107 + 8 + 90 + 8:
+                    t = 0.25
+                elif current_epoch <= 107 + 8 + 90 + 8 + 76 + 8:
+                    t = 0.5
+                elif current_epoch <= 107 + 8 + 90 + 8 + 76 + 8 + 64 + 8:
+                    t = 0.75
+                else:
+                    t = 1.0
+                # t = (current_epoch - STROKE_FADE_START) / (
+                #     STROKE_FADE_END - STROKE_FADE_START
+                # )
+                # t = max(0.0, min(1.0, t))
+                obj.stroke_width = STROKE_INITIAL + (STROKE_FINAL - STROKE_INITIAL) * t
             else:
-                t = 1.0
-            # t = (current_epoch - STROKE_FADE_START) / (
-            #     STROKE_FADE_END - STROKE_FADE_START
-            # )
-            # t = max(0.0, min(1.0, t))
-            obj.stroke_width = STROKE_INITIAL + (STROKE_FINAL - STROKE_INITIAL) * t
+                obj.stroke_width = STROKE_FINAL
 
         points.add_updater(update_points)
 
@@ -460,6 +463,7 @@ class _AnimatedUMAPOptimizationBase(TIMCSlide):
 class AnimatedUMAPOptimizationMNIST1(_AnimatedUMAPOptimizationBase):
 
     _show_spectral = True
+    _show_init = True
 
     def _load_animation_steps(self):
         return np.load("mnist_umap_animation_steps_1.npy")
@@ -481,6 +485,7 @@ class AnimatedUMAPOptimizationMNIST1(_AnimatedUMAPOptimizationBase):
 class AnimatedUMAPOptimizationMNIST2(_AnimatedUMAPOptimizationBase):
 
     _show_spectral = False
+    _show_init = False
 
     def _load_animation_steps(self):
         return np.load("mnist_umap_animation_steps_2.npy")
@@ -502,6 +507,7 @@ class AnimatedUMAPOptimizationMNIST2(_AnimatedUMAPOptimizationBase):
 class AnimatedUMAPOptimizationMNIST3(_AnimatedUMAPOptimizationBase):
 
     _show_spectral = False
+    _show_init = False
 
     def _load_animation_steps(self):
         return np.load("mnist_umap_animation_steps_3.npy")
@@ -523,6 +529,7 @@ class AnimatedUMAPOptimizationMNIST3(_AnimatedUMAPOptimizationBase):
 class AnimatedUMAPOptimizationFashionMNIST1(_AnimatedUMAPOptimizationBase):
 
     _show_spectral = True
+    _show_init = True
 
     def _load_animation_steps(self):
         return np.load("fashion_mnist_umap_animation_steps_1.npy")
@@ -555,6 +562,7 @@ class AnimatedUMAPOptimizationFashionMNIST1(_AnimatedUMAPOptimizationBase):
 class AnimatedUMAPOptimizationFashionMNIST2(_AnimatedUMAPOptimizationBase):
 
     _show_spectral = False
+    _show_init = False
 
     def _load_animation_steps(self):
         return np.load("fashion_mnist_umap_animation_steps_2.npy")
@@ -587,6 +595,7 @@ class AnimatedUMAPOptimizationFashionMNIST2(_AnimatedUMAPOptimizationBase):
 class AnimatedUMAPOptimizationFashionMNIST3(_AnimatedUMAPOptimizationBase):
 
     _show_spectral = False
+    _show_init = False
 
     def _load_animation_steps(self):
         return np.load("fashion_mnist_umap_animation_steps_3.npy")
