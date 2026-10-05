@@ -49,8 +49,12 @@ WINDOW = 20_000
 
 
 def setups(n):
-    new = dict(compatibility_layout=False, optimizer="adam", init="recursive",
-               negative_selection_range=WINDOW)
+    new = dict(
+        compatibility_layout=False,
+        optimizer="adam",
+        init="recursive",
+        negative_selection_range=WINDOW,
+    )
     new_no_hn = dict(new, negative_selection_range=n)
     old = dict(compatibility_layout=True, optimizer="compatibility", init="spectral")
     fits = {}
@@ -83,8 +87,12 @@ def load_mnist(pickle_path=None):
 def separation(Y, labels):
     """Mean distance between class centroids over mean within-class RMS radius."""
     centroids = np.array([Y[labels == c].mean(0) for c in np.unique(labels)])
-    radius = np.mean([np.sqrt(((Y[labels == c] - centroids[k]) ** 2).sum(1).mean())
-                      for k, c in enumerate(np.unique(labels))])
+    radius = np.mean(
+        [
+            np.sqrt(((Y[labels == c] - centroids[k]) ** 2).sum(1).mean())
+            for k, c in enumerate(np.unique(labels))
+        ]
+    )
     return float(pdist(centroids).mean() / radius)
 
 
@@ -95,7 +103,11 @@ def neighbour_preservation(knn_indices, Y):
 
     true = knn_indices[:, 1:]
     k = true.shape[1]
-    emb = NearestNeighbors(n_neighbors=k + 1).fit(Y).kneighbors(Y, return_distance=False)[:, 1:]
+    emb = (
+        NearestNeighbors(n_neighbors=k + 1)
+        .fit(Y)
+        .kneighbors(Y, return_distance=False)[:, 1:]
+    )
     return float((emb[:, :, None] == true[:, None, :]).any(axis=2).mean())
 
 
@@ -119,8 +131,12 @@ def aligned_sequence(frames):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mnist-pickle", help="path to mnist.pkl.gz (Nielsen format)")
-    parser.add_argument("--time-budget", type=float, default=None,
-                        help="minutes; stop starting new fits after this long")
+    parser.add_argument(
+        "--time-budget",
+        type=float,
+        default=None,
+        help="minutes; stop starting new fits after this long",
+    )
     args = parser.parse_args()
     for folder in (OUT, CACHE, THUMBS):
         folder.mkdir(exist_ok=True)
@@ -132,7 +148,9 @@ def main():
         knn = np.load(knn_file)
         knn_i, knn_d = knn["i"], knn["d"]
     else:
-        knn_i, knn_d, _ = nearest_neighbors(X, 15, "euclidean", {}, False, np.random.RandomState(42))
+        knn_i, knn_d, _ = nearest_neighbors(
+            X, 15, "euclidean", {}, False, np.random.RandomState(42)
+        )
         np.savez(knn_file, i=knn_i, d=knn_d)
 
     fits = setups(len(X))
@@ -144,8 +162,9 @@ def main():
             print("time budget reached; rerun to continue", flush=True)
             return
         t0 = time.time()
-        embedding = umap.UMAP(random_state=42, precomputed_knn=(knn_i, knn_d, None),
-                              **params).fit_transform(X)
+        embedding = umap.UMAP(
+            random_state=0, precomputed_knn=(knn_i, knn_d, None), **params
+        ).fit_transform(X)
         np.save(path, embedding.astype(np.float32))
         print(f"{name}: {time.time() - t0:.0f}s", flush=True)
 
@@ -153,15 +172,25 @@ def main():
     sweep_names = [n for n in fits if "_g" in n]
     local = quality(X, labels, {n: E[n] for n in sweep_names})
     metrics = {
-        n: dict(local[n], neighbour_preservation=neighbour_preservation(knn_i, E[n]),
-                **global_metrics(X, E[n], labels))
+        n: dict(
+            local[n],
+            neighbour_preservation=neighbour_preservation(knn_i, E[n]),
+            **global_metrics(X, E[n], labels),
+        )
         for n in sweep_names
     }
     spread = {n: separation(E[n], labels) for n in fits if "_e" in n}
 
     # Old-stack thumbnails, rendered like every other point cloud in the talk.
     for g in GAMMAS:
-        render(E[f"old_g{g}"], labels, COLOR_CYCLE, size=640, spread_px=2, fixed_spread=False).save(THUMBS / f"old_g{g}.png")
+        render(
+            E[f"old_g{g}"],
+            labels,
+            COLOR_CYCLE,
+            size=640,
+            spread_px=2,
+            fixed_spread=False,
+        ).save(THUMBS / f"old_g{g}.png")
 
     np.savez_compressed(
         OUT / "payoff.npz",

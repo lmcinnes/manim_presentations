@@ -68,7 +68,7 @@ CONFIGS = {
         detail="spectral init, 0.5 optimizer, repulsion 1",
         params=dict(
             compatibility_layout=True,
-            init="spectral",
+            init="random",  # spectral just breaks!
             optimizer="compatibility",
             repulsion_strength=1.0,
         ),
@@ -362,8 +362,8 @@ def main():
         frame is magnified relative to the full view: points grow from 0 px at
         the full view to --zoom-spread px at the deepest zoom."""
         depth = np.log(max(zoom, 1.0)) / np.log(max(args.max_zoom, 1.0 + 1e-9))
-        spread = int(round(args.zoom_spread * min(depth, 1.0)))
-        render(Y, codes, colors, extent, size=args.size, spread_px=spread).save(path)
+        # spread = int(round(args.zoom_spread * min(depth, 1.0)))
+        render(Y, codes, colors, extent, size=args.size, spread_px=0).save(path)
 
     def render_run(name, snapshots, final):
         """Timelapse frames for one run: each snapshot normalised and rotated

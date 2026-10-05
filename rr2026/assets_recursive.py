@@ -330,7 +330,7 @@ UNION_OPTIONS = dict(
 )
 
 
-def fit(X, init, trace=False, snapshots=True, seed=31415, recursive_options=None):
+def fit(X, init, trace=False, snapshots=True, seed=0, recursive_options=None):
     import functools
 
     original = umap_module.recursive_init

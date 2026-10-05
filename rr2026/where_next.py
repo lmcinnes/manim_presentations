@@ -178,7 +178,7 @@ def darker(color, amount=0.4):
 class WhereNext(UMAPSlide):
     # Showcase pairs: edge numbers from assets/where_next_candidates.png, in the
     # order to show them. None uses the assets script's two default picks.
-    SHOWCASE_EDGES = [19908, 257, 17350]
+    SHOWCASE_EDGES = [17347, 19907, 257]
 
     def construct(self):
         self.data = np.load(ASSETS / "where_next.npz")

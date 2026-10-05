@@ -50,8 +50,9 @@ class TitleAndIntro(TIMCSlide):
         ).next_to(venue, DOWN)
 
         self.add(logo, venue, speaker)
+        self.wait(3)
 
-        self.next_slide()
+        self.marked_next_slide()
         self.clear_slide()
 
         self.add_centered_text("UMAP has been very successful over the years")
