@@ -197,6 +197,8 @@ def create_styled_axes(
             "include_tip": True,
             "color": DEFAULT_COLOR,
             "tip_shape": StealthTip,
+            "tip_height": 0.1,
+            "tip_width": 0.1,
         },
         y_axis_config={
             "numbers_to_include": (

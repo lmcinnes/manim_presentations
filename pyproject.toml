@@ -15,4 +15,6 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "hdtda",
+    "visxai",
+    "rr2026",
 ]

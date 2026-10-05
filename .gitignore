@@ -216,6 +216,9 @@ slide_states/
 *.npy
 evoc_tmls_assets/
 Summary_assets/
+rr2026/assets/
+visxai/mnist_cache/
+visxai/quickdraw_cache/
 
 # Output files
 *.pptx

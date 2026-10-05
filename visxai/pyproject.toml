@@ -1,0 +1,19 @@
+[project]
+name = "visxai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "manim>=0.19.1",
+    "manim-slides>=5.5.4",
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.15.3",
+    "seaborn>=0.13.2",
+    "torch>=2.14.0",
+    "torchvision>=0.29.0",
+    "transformers>=5.17.0",
+    "umap-learn>=0.5.12",
+]
