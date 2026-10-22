@@ -211,6 +211,8 @@ __marimo__/
 slides/
 media/
 slide_states/
+slides_720p30/
+slides_1080p60/
 
 # Large data files
 *.npy
