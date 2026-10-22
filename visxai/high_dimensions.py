@@ -36,6 +36,34 @@ from scipy.stats import norm
 
 import ot
 
+
+def SmallText(text, font_size=48, **kwargs):
+    """Text, built at 48pt and scaled to font_size (Marcellus kerns badly at
+    small sizes). Text with newlines becomes a centred Paragraph."""
+    if "\n" in text:
+        mob = Paragraph(*text.split("\n"), font_size=48, alignment="center",
+                        **kwargs)
+    else:
+        mob = Text(text, font_size=48, **kwargs)
+    return mob.scale(font_size / 48)
+
+
+def shrink_row(items, left=-6.9, gap=0.4, stroke_power=0.5):
+    """Animations that shrink each (group, scale) and lay the groups out
+    left to right from x = left, edge to edge with `gap` between them, so
+    they never overlap. Stroke widths shrink by scale ** stroke_power (by
+    less than the group, so lines stay visible, but they do get thinner)."""
+    anims, x = [], left
+    for group, scale in items:
+        target = group.copy().scale(scale)
+        for m in target.get_family():
+            if isinstance(m, VMobject) and m.get_stroke_width() > 0:
+                m.set_stroke(width=m.get_stroke_width() * scale ** stroke_power)
+        target.move_to([x + target.width / 2, 0, 0])
+        x += target.width + gap
+        anims.append(Transform(group, target))
+    return anims
+
 apply_defaults()
 
 
@@ -85,7 +113,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             "Volume ratio of shell to ball:",
             t2c={r"ball": ACCENT_COLOR, r"shell": HIGHLIGHT_COLOR},
             font_size=28,
@@ -150,7 +178,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             "Volume ratio of shell to ball:",
             t2c={r"ball": ACCENT_COLOR, r"shell": HIGHLIGHT_COLOR},
             font_size=28,
@@ -190,7 +218,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
         self.play(LaggedStart(Write(n_sphere), Write(n_shell), lag_ratio=1.0))
         self.wait()
         self.marked_next_slide()
-        ratio_text = Text(
+        ratio_text = SmallText(
             "Volume ratio of shell to ball:",
             t2c={r"ball": ACCENT_COLOR, r"shell": HIGHLIGHT_COLOR},
             font_size=28,
@@ -292,7 +320,7 @@ class ShadedNNDistribution(TIMCSlide):
 
         # --- Initial State ---
         dim_tracker = Integer(dimensions[0]).to_corner(UR)
-        label = Text("dimension = ", font_size=24).next_to(dim_tracker, LEFT)
+        label = SmallText("dimension = ", font_size=24).next_to(dim_tracker, LEFT)
 
         # current_mobjects is a VGroup(area, curve)
         current_mobjects, current_loc = get_distribution_mobjects(dimensions[0])
@@ -312,7 +340,7 @@ class ShadedNNDistribution(TIMCSlide):
             if d in [4, 8, 16, 32, 64]:
                 saved_density = new_mobjects.copy()
 
-                density_label = Text(
+                density_label = SmallText(
                     f"dim={d}",
                     font_size=18,
                     color=colorcet.bmy[
@@ -520,7 +548,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             "Volume ratio of ball to box:",
             t2c={r"ball": ACCENT_COLOR, r"box": HIGHLIGHT_COLOR},
             font_size=28,
@@ -546,7 +574,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
             ratio_value.animate.next_to(square, DOWN, buff=0.5),
         )
         two_d_case = VGroup(square, disk, ratio_value)
-        self.play(two_d_case.animate.scale(0.5).move_to(5.2 * LEFT))
+        self.play(*shrink_row([(two_d_case, 0.5)]))
         self.marked_next_slide()
 
         # ---- 3D: sphere in a cube (tilted so the cube reads as 3D) ----
@@ -589,7 +617,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             "Volume ratio of ball to box:",
             t2c={r"ball": ACCENT_COLOR, r"box": HIGHLIGHT_COLOR},
             font_size=28,
@@ -607,10 +635,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
             ratio_value_3d.animate.next_to(cube, DOWN, buff=0.5),
         )
         three_d_case = VGroup(cube, sphere, ratio_value_3d)
-        self.play(
-            two_d_case.animate.scale(0.5).move_to(5.5 * LEFT),
-            three_d_case.animate.scale(0.5).move_to(3.5 * LEFT),
-        )
+        self.play(*shrink_row([(two_d_case, 0.5), (three_d_case, 0.5)]))
         self.wait()
 
         # ---- n dimensions ----
@@ -626,7 +651,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
         self.wait()
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             "Volume ratio of ball to box:",
             t2c={r"ball": ACCENT_COLOR, r"box": HIGHLIGHT_COLOR},
             font_size=28,
@@ -644,11 +669,8 @@ class BallInBoxVolume(ThreeDTIMCSlide):
             ratio_value_nd.animate.next_to(n_box, DOWN, buff=0.75),
         )
         n_d_case = VGroup(n_ball, n_box, ratio_value_nd)
-        self.play(
-            two_d_case.animate.scale(0.5).move_to(6.5 * LEFT),
-            three_d_case.animate.scale(0.5).move_to(5.5 * LEFT),
-            n_d_case.animate.scale(0.66).move_to(3.66 * LEFT),
-        )
+        self.play(*shrink_row([(two_d_case, 0.5), (three_d_case, 0.5),
+                               (n_d_case, 0.6)], gap=0.3))
 
         dims = [2, 3, 4, 5, 10, 20, 100]
         table = (
@@ -742,7 +764,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
         equator = DashedLine(
             LEFT * (R + 0.5), RIGHT * (R + 0.5), color=DEFAULT_COLOR, stroke_width=2
         )
-        eq_label = Text("equator", font_size=22, color=DEFAULT_COLOR).next_to(
+        eq_label = SmallText("equator", font_size=22, color=DEFAULT_COLOR).next_to(
             equator, LEFT, buff=0.1
         )
         self.play(Create(circle))
@@ -781,7 +803,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             f"Band holding {pct_text} of the circumference:",
             t2c={"Band": HIGHLIGHT_COLOR, "circumference": ACCENT_COLOR},
             font_size=28,
@@ -799,7 +821,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
             h_value.animate.next_to(circle, DOWN, buff=0.5),
         )
         two_d_case = VGroup(circle, band_arcs, bounds, h_value)
-        self.play(two_d_case.animate.scale(0.5).move_to(4 * LEFT))
+        self.play(*shrink_row([(two_d_case, 0.5)]))
         self.marked_next_slide()
 
         # ---- 3D: sphere and an equatorial belt ----
@@ -847,7 +869,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
 
         self.marked_next_slide()
 
-        ratio_text = Text(
+        ratio_text = SmallText(
             f"Band holding {pct_text} of the surface area:",
             t2c={"Band": HIGHLIGHT_COLOR, "surface area": ACCENT_COLOR},
             font_size=28,
@@ -865,10 +887,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
             h_value_3d.animate.next_to(sphere3, DOWN, buff=0.5),
         )
         three_d_case = VGroup(sphere3, h_value_3d)
-        self.play(
-            two_d_case.animate.scale(0.5).move_to(5.5 * LEFT),
-            three_d_case.animate.scale(0.5).move_to(3.5 * LEFT),
-        )
+        self.play(*shrink_row([(two_d_case, 0.5), (three_d_case, 0.5)]))
         self.wait()
 
         # ---- n dimensions ----
@@ -887,7 +906,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
         self.marked_next_slide()
 
         z = norm.ppf((1 + p) / 2)
-        ratio_text = Text(
+        ratio_text = SmallText(
             f"Band holding {pct_text} of the surface area:",
             t2c={"Band": HIGHLIGHT_COLOR, "surface area": ACCENT_COLOR},
             font_size=28,
@@ -905,11 +924,8 @@ class EquatorBandArea(ThreeDTIMCSlide):
             h_value_nd.animate.next_to(n_band, DOWN, buff=0.75),
         )
         n_d_case = VGroup(n_sphere, n_band, h_value_nd)
-        self.play(
-            two_d_case.animate.scale(0.5).move_to(6.5 * LEFT),
-            three_d_case.animate.scale(0.5).move_to(5.5 * LEFT),
-            n_d_case.animate.scale(0.66).move_to(3.3 * LEFT),
-        )
+        self.play(*shrink_row([(two_d_case, 0.5), (three_d_case, 0.5),
+                               (n_d_case, 0.6)], gap=0.3))
 
         dims = [2, 3, 5, 10, 100, 1000, 10000]
         table = (
@@ -953,7 +969,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
             )
         )
 
-        title = Text("Which equator?", font_size=40).to_edge(UP, buff=0.4)
+        title = SmallText("Which equator?", font_size=40).to_edge(UP, buff=0.4)
         self.add_fixed_in_frame_mobjects(title)
         self.play(Write(title))
 
@@ -964,15 +980,38 @@ class EquatorBandArea(ThreeDTIMCSlide):
             Rb, -PI / 2, PI / 2, ACCENT_COLOR, 0.3, resolution=(48, 24)
         ).rotate(self.TILT, axis=RIGHT, about_point=ORIGIN)
 
+        # Depth for the bands is handled explicitly rather than by the 3D
+        # camera's sort (which orders whole faces by their centres, and so
+        # flickers where bands and the translucent sphere sit at nearly the
+        # same depth). Each frame, every band face on the near side of the
+        # sphere is drawn on top; faces on the far side are drawn beneath
+        # them, dimmed, as if seen through the sphere. Where bands overlap,
+        # the moving band is on top, then the ghosts in the order left.
+        BAND_OUT, BACK_DIM = 1.0, 0.3     # bands on the sphere itself
+        tracked = []                       # (band, opacity tracker, z order)
+
         def make_band(color):
-            return VGroup(
-                sphere_patch(Rb, -ab, ab, color, 0.9, resolution=(64, 2)),
-                latitude_circle(Rb, ab, color, 1.5),
-                latitude_circle(Rb, -ab, color, 1.5),
+            Rs = Rb * BAND_OUT
+            band = VGroup(
+                sphere_patch(Rs, -ab, ab, color, 0.9, resolution=(96, 2)),
+                latitude_circle(Rs, ab, color, 1.5),
+                latitude_circle(Rs, -ab, color, 1.5),
             ).rotate(self.TILT, axis=RIGHT, about_point=ORIGIN)
+            for face in band[0]:
+                face.shade_in_3d = False   # ordered by depth_cue instead
+            return band
+
+        def depth_cue(dt):
+            for band, opacity, order in tracked:
+                o = opacity.get_value()
+                for face in band[0]:
+                    front = face.get_center()[2] >= 0    # camera looks down z
+                    face.set_fill(opacity=o if front else o * BACK_DIM)
+                    face.set_stroke(opacity=o if front else o * BACK_DIM)
+                    face.z_index = order if front else -2 + 0.01 * order
 
         band_s = make_band(HIGHLIGHT_COLOR)
-        note = Text(
+        note = SmallText(
             "schematic: a thin band, as in high dimensions",
             font_size=20,
             color=ACCENT_COLOR,
@@ -980,10 +1019,12 @@ class EquatorBandArea(ThreeDTIMCSlide):
         self.add_fixed_in_frame_mobjects(note)
         self.play(Create(ball), FadeIn(note))
         self.play(FadeIn(band_s))
+        tracked.append((band_s, ValueTracker(0.9), 2.0))
+        self.add_updater(depth_cue)
         self.wait()
         self.marked_next_slide()
 
-        point = Text(
+        point = SmallText(
             "We never said which equator:\n"
             f"the same band about any equator holds {pct_text}",
             font_size=26,
@@ -1002,20 +1043,21 @@ class EquatorBandArea(ThreeDTIMCSlide):
             axis /= np.linalg.norm(axis)
             angle = rng.uniform(0.5, 1.3) * (1 if k % 2 else -1)
             ghost = band_s.copy()
+            ghost_opacity = ValueTracker(0.9)
+            tracked.append((ghost, ghost_opacity, 1.0 + 0.1 * k))
             self.add(ghost)
             ghosts.add(ghost)
             self.play(
                 Rotate(band_s, angle=angle, axis=axis, about_point=ORIGIN),
-                ghost[0]
-                .animate.set_fill(col, opacity=0.35)
-                .set_stroke(col, opacity=0.35),
+                ghost[0].animate.set_fill(col).set_stroke(col),
+                ghost_opacity.animate.set_value(0.35),
                 ghost[1:].animate.set_stroke(col, opacity=0.6),
                 run_time=1.6,
             )
         self.wait()
         self.marked_next_slide()
 
-        conclusion = Text(
+        conclusion = SmallText(
             "So in high dimensions almost all of the surface\n"
             "lies close to every equator at once:\n"
             "two random directions are almost always nearly orthogonal",
