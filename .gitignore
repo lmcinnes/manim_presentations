@@ -219,6 +219,9 @@ Summary_assets/
 rr2026/assets/
 visxai/mnist_cache/
 visxai/quickdraw_cache/
+visxai/world_cache/
+visxai/*.mp4
+*.npz
 
 # Output files
 *.pptx

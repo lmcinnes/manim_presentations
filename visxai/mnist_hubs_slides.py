@@ -53,10 +53,8 @@ DATA_FILE = Path(os.environ.get("MNIST_HUBS", _HERE / "mnist_hubs.npz"))
 
 PAIRS = [
     (15728, 25703),
-    (17664, 32612),
-    (63213, 2725),
-    (36046, 4508),
-    (22312, 11235),
+    (15386, 319),
+    (11416, 35253),
 ]
 # PAIRS = None             # e.g. [(17664, 32612), (28984, 28005)] as (bad, good);
 # None = the prep's top N_PAIRS_DEFAULT pairs
@@ -140,8 +138,16 @@ class MNISTHubsSlide(TIMCSlide):
 
     # ---- building blocks -------------------------------------------------
     def heading(self, title, subtitle):
-        t = Text(title, color=DEFAULT_COLOR).scale(0.6).to_edge(UP, buff=0.3)
-        s = Text(subtitle, color=ACCENT_COLOR).scale(0.32).next_to(t, DOWN, buff=0.12)
+        t = (
+            Text(title, font_size=72, color=DEFAULT_COLOR)
+            .scale(0.33)
+            .to_edge(UP, buff=0.3)
+        )
+        s = (
+            Paragraph(subtitle, font_size=72, color=ACCENT_COLOR, alignment="center")
+            .scale(0.166)
+            .next_to(t, DOWN, buff=0.12)
+        )
         return VGroup(t, s)
 
     def build_points(self):
@@ -298,9 +304,9 @@ class MNISTHubsSlide(TIMCSlide):
             n_bad = len(np.unique(self.y[reverse_neighbours(self.idx, b)]))
             new = self.heading(
                 "Same local picture, different roles",
-                f"the {self.y[g]} gathers {n_good} kind of digit; "
-                f"the {self.y[b]} gathers {n_bad} kinds "
-                "-- only labels or a global view tell them apart",
+                f"The {self.y[g]} gathers {n_good} kind of digit;\n"
+                f"The {self.y[b]} gathers {n_bad} kinds\n"
+                "Only labels or a global view tell them apart",
             )
             self.play(FadeTransform(head, new))
             head = new

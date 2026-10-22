@@ -188,6 +188,7 @@ def main():
         Path(a.cache) / f"features_{tag}_{'-'.join(a.categories)}_"
         f"{a.offset}_{a.per_class}.npz",
     )
+    a.n_show = max(a.n_show, 64)
     # features are L2-normalised, so Euclidean neighbours = cosine neighbours
     analyse_and_save(
         F, y, a.categories, X, a.out, a, feature_space="DINOv2 embedding space"

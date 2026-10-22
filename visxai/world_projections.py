@@ -37,11 +37,11 @@ DATA_FILE = Path(os.environ.get("WORLD_MAP", _HERE / "world_map.npz"))
 OCEAN_COLOR = interpolate_color(COLOR_CYCLE[0], WHITE, 0.6)
 LAND_COLOR = interpolate_color(COLOR_CYCLE[2], WHITE, 0.45)
 COAST_COLOR = DEFAULT_COLOR
-GRATICULE_COLOR = WHITE   # reads on both the photographic land and sea
-FACE_SHADING = 0.35       # Dymaxion: darkest face shading (0 = none)
+GRATICULE_COLOR = WHITE  # reads on both the photographic land and sea
+FACE_SHADING = 0.35  # Dymaxion: darkest face shading (0 = none)
 EDGE_COLOR, EDGE_WIDTH, EDGE_OPACITY = DEFAULT_COLOR, 1.2, 0.55
-INSIDE_DARKEN = 0.4       # the inside of the surface: same map, darker
-                          # (0 = same as outside; 1 = black)
+INSIDE_DARKEN = 0.4  # the inside of the surface: same map, darker
+# (0 = same as outside; 1 = black)
 
 # The icosahedron (dymaxion.py) uses x = cos(lat) cos(lon), y = cos(lat)
 # sin(lon); the screen layout here has the prime meridian facing the camera
@@ -56,8 +56,10 @@ SCREEN_FROM_GEO = GEO_FROM_SCREEN.T
 # ---------------------------------------------------------------------------
 def sphere_xyz(lon, lat, radius):
     lam, phi = np.radians(lon), np.radians(lat)
-    return radius * np.c_[np.cos(phi) * np.sin(lam), -np.cos(phi) * np.cos(lam),
-                          np.sin(phi)]
+    return (
+        radius
+        * np.c_[np.cos(phi) * np.sin(lam), -np.cos(phi) * np.cos(lam), np.sin(phi)]
+    )
 
 
 def lambert(lon, lat, rc):
@@ -76,10 +78,14 @@ def equal_earth(lon, lat, rc):
 
     def raw(lam, phi):
         th = np.arcsin(np.sqrt(3) / 2 * np.sin(phi))
-        x = (2 * np.sqrt(3) * lam * np.cos(th)
-             / (3 * (9 * A4 * th ** 8 + 7 * A3 * th ** 6 + 3 * A2 * th ** 2
-                     + A1)))
-        return x, th * (A1 + A2 * th ** 2 + A3 * th ** 6 + A4 * th ** 8)
+        x = (
+            2
+            * np.sqrt(3)
+            * lam
+            * np.cos(th)
+            / (3 * (9 * A4 * th**8 + 7 * A3 * th**6 + 3 * A2 * th**2 + A1))
+        )
+        return x, th * (A1 + A2 * th**2 + A3 * th**6 + A4 * th**8)
 
     k = rc * PI / raw(PI, 0.0)[0]
     x, y = raw(np.radians(lon), np.radians(lat))
@@ -119,10 +125,10 @@ class WorldProjections(ThreeDTIMCSlide):
     """Globe -> Mercator -> globe -> Equal Earth -> globe -> Dymaxion."""
 
     GLOBE_RADIUS = 2.2
-    MERCATOR_RC = 1.2      # cylinder radius for each map (sets its size)
+    MERCATOR_RC = 1.2  # cylinder radius for each map (sets its size)
     EQUAL_EARTH_RC = 1.9
     NET_WIDTH, NET_HEIGHT = 11.5, 5.8
-    DROP = 0.35            # flat maps sit a little low, clear of the title
+    DROP = 0.35  # flat maps sit a little low, clear of the title
     FACE_SUBDIVISIONS = 8  # Dymaxion ocean: small triangles per face side
 
     COAST_WIDTH = 1.2
@@ -132,26 +138,27 @@ class WorldProjections(ThreeDTIMCSlide):
 
     GLOBE_CAMERA = dict(phi=72 * DEGREES, theta=-90 * DEGREES)
     FLAT_CAMERA = dict(phi=90 * DEGREES, theta=-90 * DEGREES)
-    SPIN_RATE = 0.45
-    STEP_SECONDS = 2.5     # each stage of an unwrapping
+    SPIN_RATE = 0.9
+    STEP_SECONDS = 2.5  # each stage of an unwrapping
 
     # ---- data ------------------------------------------------------------
     def setup_data(self):
         with np.load(DATA_FILE) as z:
             d = {k: z[k] for k in z.files}
-        self.line_ll = d["lonlat"]                     # (N, 2) lon, lat
+        self.line_ll = d["lonlat"]  # (N, 2) lon, lat
         self.segments, self.group = d["segments"], d["group"]
         self.vertex_cell = d["vertex_cell"]
-        cells = d["cells"]                             # (C, 4, 2) corners
+        cells = d["cells"]  # (C, 4, 2) corners
         self.n_cells = len(cells)
-        self.cell_ll = cells.reshape(-1, 2)            # corners, flattened
+        self.cell_ll = cells.reshape(-1, 2)  # corners, flattened
         self.cell_land = d["cell_land"].astype(bool)
         # colours read off a map image (if the prep had one), else two tones
         if "palette" in d:
             self.palette = [rgb_to_color(c / 255.0) for c in d["palette"]]
             self.cell_colour = d["cell_colour"]
-            ocean_idx = np.bincount(self.cell_colour[~self.cell_land],
-                                    minlength=len(self.palette)).argmax()
+            ocean_idx = np.bincount(
+                self.cell_colour[~self.cell_land], minlength=len(self.palette)
+            ).argmax()
             self.ocean_colour = self.palette[ocean_idx]
         else:
             self.palette = [OCEAN_COLOR, LAND_COLOR]
@@ -163,8 +170,7 @@ class WorldProjections(ThreeDTIMCSlide):
             self.cell_group = d["cell_colour"].astype(int)
             self.group_colors = [ManimColor(c / 255.0) for c in d["palette"]]
             ocean_groups = self.cell_group[~self.cell_land]
-            self.net_ocean_color = self.group_colors[
-                np.bincount(ocean_groups).argmax()]
+            self.net_ocean_color = self.group_colors[np.bincount(ocean_groups).argmax()]
         else:
             self.cell_group = self.cell_land.astype(int)
             self.group_colors = [OCEAN_COLOR, LAND_COLOR]
@@ -172,8 +178,9 @@ class WorldProjections(ThreeDTIMCSlide):
 
         # Dymaxion: every point goes onto one icosahedron face (mesh cells
         # onto the face of their centre, so each cell stays in one piece)
-        self.ico = Icosahedron(d["ico_vertices"], d["ico_faces"],
-                               d["ico_hinges"], int(d["ico_root"]))
+        self.ico = Icosahedron(
+            d["ico_vertices"], d["ico_faces"], d["ico_hinges"], int(d["ico_root"])
+        )
         geo = lambda ll: sphere_xyz(ll[:, 0], ll[:, 1], 1.0) @ GEO_FROM_SCREEN.T
         self.line_face = self.ico.face_of(geo(self.line_ll))
         self.cell_face = np.repeat(self.ico.face_of(geo(cells.mean(1))), 4)
@@ -194,7 +201,7 @@ class WorldProjections(ThreeDTIMCSlide):
                         tris.append([P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)])
                         tri_face.append(fi)
         self.n_tris = len(tris)
-        self.tri_face_of = np.array(tri_face)       # face of each triangle
+        self.tri_face_of = np.array(tri_face)  # face of each triangle
         # each face's three edges as short polylines (they bend with the
         # surface while it morphs between globe and icosahedron)
         t = np.linspace(0, 1, 12)[:, None]
@@ -207,42 +214,55 @@ class WorldProjections(ThreeDTIMCSlide):
         self.edge_face_of = np.array(edge_face)
         self.edge_face = np.repeat(edge_face, len(t))
         self.edge_unit = self.edge_gno / np.linalg.norm(
-            self.edge_gno, axis=1, keepdims=True)
+            self.edge_gno, axis=1, keepdims=True
+        )
         self.edge_len = len(t)
         self.tri_gno = np.array(tris).reshape(-1, 3)
         self.tri_face = np.repeat(tri_face, 3)
-        self.tri_unit = self.tri_gno / np.linalg.norm(self.tri_gno, axis=1,
-                                                      keepdims=True)
+        self.tri_unit = self.tri_gno / np.linalg.norm(
+            self.tri_gno, axis=1, keepdims=True
+        )
         # coastline segments that span a cut edge are dropped (the tears)
         f0 = self.line_face[self.segments[:, 0]]
         f1 = self.line_face[self.segments[:, 1]]
         self.seg_not_torn = np.array(
-            [a == b or (min(a, b), max(a, b)) in self.ico.hinge_pairs
-             for a, b in zip(f0, f1)])
+            [
+                a == b or (min(a, b), max(a, b)) in self.ico.hinge_pairs
+                for a, b in zip(f0, f1)
+            ]
+        )
         self._setup_net_layout()
 
     def _setup_net_layout(self):
         """Rotation that turns the flat net to face the camera and lie
         horizontally, plus the scale/shift that fits it on the slide."""
         T = self.ico.transforms(1.0)
-        corners = np.vstack([self.ico.V[self.ico.faces[fi]] @ T[fi][:3, :3].T
-                             + T[fi][:3, 3] for fi in self.ico.order])
+        corners = np.vstack(
+            [
+                self.ico.V[self.ico.faces[fi]] @ T[fi][:3, :3].T + T[fi][:3, 3]
+                for fi in self.ico.order
+            ]
+        )
         corners = corners @ SCREEN_FROM_GEO.T
         n0 = SCREEN_FROM_GEO @ self.ico.normals[self.ico.order[0]]
-        target = np.array([0.0, -1.0, 0.0])           # towards the camera
+        target = np.array([0.0, -1.0, 0.0])  # towards the camera
         ax = np.cross(n0, target)
-        A1 = (np.eye(3) if np.linalg.norm(ax) < 1e-9
-              else rot(ax, np.arccos(np.clip(n0 @ target, -1, 1))))
-        flat = corners @ A1.T                         # now in an x-z plane
+        A1 = (
+            np.eye(3)
+            if np.linalg.norm(ax) < 1e-9
+            else rot(ax, np.arccos(np.clip(n0 @ target, -1, 1)))
+        )
+        flat = corners @ A1.T  # now in an x-z plane
         xz = flat[:, [0, 2]] - flat[:, [0, 2]].mean(0)
         _, evecs = np.linalg.eigh(xz.T @ xz)
-        major = evecs[:, -1]                          # long axis -> screen x
+        major = evecs[:, -1]  # long axis -> screen x
         A2 = rot([0, 1, 0], np.arctan2(major[1], major[0]))
         self.net_axis, self.net_angle = axis_angle(A2 @ A1)
         flat = corners @ (A2 @ A1).T
         lo, hi = flat[:, [0, 2]].min(0), flat[:, [0, 2]].max(0)
-        self.net_scale = min(self.NET_WIDTH / (hi[0] - lo[0]),
-                             self.NET_HEIGHT / (hi[1] - lo[1]))
+        self.net_scale = min(
+            self.NET_WIDTH / (hi[0] - lo[0]), self.NET_HEIGHT / (hi[1] - lo[1])
+        )
         mid = (lo + hi) / 2
         self.net_shift = np.array([-mid[0], 0.0, -mid[1]]) * self.net_scale
 
@@ -250,12 +270,22 @@ class WorldProjections(ThreeDTIMCSlide):
     def positions(self, ll, gno, face, unit):
         if self.mode == "dymaxion":
             return self.dymaxion_positions(unit, gno, face)
-        rc, target = ((self.MERCATOR_RC, mercator) if self.mode == "mercator"
-                      else (self.EQUAL_EARTH_RC, equal_earth))
-        return cylinder_stage(ll[:, 0], ll[:, 1], rc, target,
-                              self.wrap.get_value(), self.unbend.get_value(),
-                              self.stretch.get_value(), self.GLOBE_RADIUS,
-                              self.DROP)
+        rc, target = (
+            (self.MERCATOR_RC, mercator)
+            if self.mode == "mercator"
+            else (self.EQUAL_EARTH_RC, equal_earth)
+        )
+        return cylinder_stage(
+            ll[:, 0],
+            ll[:, 1],
+            rc,
+            target,
+            self.wrap.get_value(),
+            self.unbend.get_value(),
+            self.stretch.get_value(),
+            self.GLOBE_RADIUS,
+            self.DROP,
+        )
 
     def dymaxion_positions(self, unit, gno, face):
         """wrap: globe -> icosahedron; unfold: icosahedron -> flat net
@@ -268,29 +298,33 @@ class WorldProjections(ThreeDTIMCSlide):
             if sel.any():
                 P[sel] = gno[sel] @ M[:3, :3].T + M[:3, 3]
         P = P @ SCREEN_FROM_GEO.T @ rot(self.net_axis, self.net_angle * u).T
-        P = P * ((1 - u) * self.GLOBE_RADIUS + u * self.net_scale) \
-            + u * (self.net_shift + np.array([0.0, 0.0, -self.DROP]))
+        P = P * ((1 - u) * self.GLOBE_RADIUS + u * self.net_scale) + u * (
+            self.net_shift + np.array([0.0, 0.0, -self.DROP])
+        )
         S = unit @ SCREEN_FROM_GEO.T * self.GLOBE_RADIUS
         return (1 - t) * S + t * P
 
     def cell_visibility(self):
         """Cell corners now, and which cells face the camera (back faces are
         hidden, since filled shapes aren't depth-sorted)."""
-        C = self.positions(self.cell_ll, self.cell_gno, self.cell_face,
-                           self.cell_unit).reshape(self.n_cells, 4, 3)
+        C = self.positions(
+            self.cell_ll, self.cell_gno, self.cell_face, self.cell_unit
+        ).reshape(self.n_cells, 4, 3)
         n = np.cross(C[:, 2] - C[:, 0], C[:, 3] - C[:, 1])
         return C, n @ self.camera_direction()
 
     def camera_direction(self):
         phi, theta = self.camera.get_phi(), self.camera.get_theta()
-        return np.array([np.sin(phi) * np.cos(theta),
-                         np.sin(phi) * np.sin(theta), np.cos(phi)])
+        return np.array(
+            [np.sin(phi) * np.cos(theta), np.sin(phi) * np.sin(theta), np.cos(phi)]
+        )
 
     def ocean_triangles(self):
         """Dymaxion ocean triangles, and how much each faces the camera
         (negative = we see its inside)."""
-        T = self.dymaxion_positions(self.tri_unit, self.tri_gno,
-                                    self.tri_face).reshape(self.n_tris, 3, 3)
+        T = self.dymaxion_positions(self.tri_unit, self.tri_gno, self.tri_face).reshape(
+            self.n_tris, 3, 3
+        )
         n = np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0])
         return T, n @ self.camera_direction()
 
@@ -299,11 +333,12 @@ class WorldProjections(ThreeDTIMCSlide):
         """One VMobject of small filled cells per palette colour, plus the
         Dymaxion ocean (exact icosahedron faces, so the net's edges are
         straight)."""
+
         def quads(C):
             """Closed polygons (quads or triangles) as one VMobject."""
             if len(C) == 0:
                 return np.zeros((0, 3))
-            A, B = C, np.roll(C, -1, axis=1)          # each side A -> B
+            A, B = C, np.roll(C, -1, axis=1)  # each side A -> B
             k = C.shape[1]
             pts = np.empty((len(C), k, 4, 3))
             pts[:, :, 0], pts[:, :, 3] = A, B
@@ -312,8 +347,9 @@ class WorldProjections(ThreeDTIMCSlide):
             return pts.reshape(-1, 3)
 
         def fill(colour):
-            return VMobject(fill_color=colour, fill_opacity=1,
-                            stroke_color=colour, stroke_width=0.6)
+            return VMobject(
+                fill_color=colour, fill_opacity=1, stroke_color=colour, stroke_width=0.6
+            )
 
         def darker(c):
             return interpolate_color(ManimColor(c), BLACK, INSIDE_DARKEN)
@@ -322,8 +358,9 @@ class WorldProjections(ThreeDTIMCSlide):
         # darker, then the outside on top. On the closed globe the inside is
         # entirely hidden; as the map unrolls or unfolds it shows through.
         n_col = len(self.palette)
-        inside = [fill(darker(self.ocean_colour))] + \
-            [fill(darker(c)) for c in self.palette]
+        inside = [fill(darker(self.ocean_colour))] + [
+            fill(darker(c)) for c in self.palette
+        ]
         outside = [fill(self.ocean_colour)] + [fill(c) for c in self.palette]
         eps = 1e-9
 
@@ -331,14 +368,15 @@ class WorldProjections(ThreeDTIMCSlide):
             C, facing = self.cell_visibility()
             front, back = facing > eps, facing < -eps
             self._visible = front
-            if self.wrap.get_value() <= 0:        # closed globe: no inside
+            if self.wrap.get_value() <= 0:  # closed globe: no inside
                 back = np.zeros_like(back)
             if self.mode == "dymaxion":
                 T, tf = self.ocean_triangles()
-                group[0].set_points(quads(T[tf < -eps]) if back.any()
-                                    else np.zeros((0, 3)))
+                group[0].set_points(
+                    quads(T[tf < -eps]) if back.any() else np.zeros((0, 3))
+                )
                 group[n_col + 1].set_points(quads(T[tf > eps]))
-                front = front & self.cell_land    # ocean comes from faces
+                front = front & self.cell_land  # ocean comes from faces
                 back = back & self.cell_land
             else:
                 group[0].set_points(np.zeros((0, 3)))
@@ -357,10 +395,17 @@ class WorldProjections(ThreeDTIMCSlide):
         """Dymaxion only: per-face shading (a translucent dark overlay set
         by a light just above-left of the camera) and the icosahedron's
         edges, so the folded map reads as a solid."""
-        shades = VGroup(*[VMobject(fill_color=BLACK, fill_opacity=0,
-                                   stroke_width=0) for _ in self.ico.faces])
-        edges = VMobject(stroke_color=EDGE_COLOR, stroke_width=EDGE_WIDTH,
-                         stroke_opacity=EDGE_OPACITY)
+        shades = VGroup(
+            *[
+                VMobject(fill_color=BLACK, fill_opacity=0, stroke_width=0)
+                for _ in self.ico.faces
+            ]
+        )
+        edges = VMobject(
+            stroke_color=EDGE_COLOR,
+            stroke_width=EDGE_WIDTH,
+            stroke_opacity=EDGE_OPACITY,
+        )
 
         def tris_points(T):
             if len(T) == 0:
@@ -397,13 +442,15 @@ class WorldProjections(ThreeDTIMCSlide):
                 lit = np.clip(n[sel].mean(0) @ light, 0, 1)
                 m.set_points(tris_points(T[sel]))
                 m.set_fill(BLACK, opacity=t * FACE_SHADING * (1 - lit))
-            P = self.dymaxion_positions(self.edge_unit, self.edge_gno,
-                                        self.edge_face)
+            P = self.dymaxion_positions(self.edge_unit, self.edge_gno, self.edge_face)
             P = P.reshape(-1, self.edge_len, 3)
             # keep the edges of faces that face the camera
-            face_front = np.array([
-                (facing[self.tri_face_of == fi] > 1e-9).mean() > 0.5
-                for fi in range(len(self.ico.faces))])
+            face_front = np.array(
+                [
+                    (facing[self.tri_face_of == fi] > 1e-9).mean() > 0.5
+                    for fi in range(len(self.ico.faces))
+                ]
+            )
             P = P[face_front[self.edge_face_of]]
             A, B = P[:, :-1].reshape(-1, 3), P[:, 1:].reshape(-1, 3)
             pts = np.empty((4 * len(A), 3))
@@ -419,8 +466,7 @@ class WorldProjections(ThreeDTIMCSlide):
         return facets
 
     def build_lines(self, group, color, width, opacity=1.0):
-        vm = VMobject(stroke_color=color, stroke_width=width,
-                      stroke_opacity=opacity)
+        vm = VMobject(stroke_color=color, stroke_width=width, stroke_opacity=opacity)
         sel = self.group == group
 
         def update(m):
@@ -429,8 +475,9 @@ class WorldProjections(ThreeDTIMCSlide):
             if self.mode == "dymaxion":
                 ok &= self.seg_not_torn[sel]
             seg = seg[ok]
-            P = self.positions(self.line_ll, self.line_gno, self.line_face,
-                               self.line_unit)
+            P = self.positions(
+                self.line_ll, self.line_gno, self.line_face, self.line_unit
+            )
             A, B = P[seg[:, 0]], P[seg[:, 1]]
             pts = np.empty((4 * len(A), 3))
             pts[0::4], pts[3::4] = A, B
@@ -444,9 +491,16 @@ class WorldProjections(ThreeDTIMCSlide):
 
     # ---- labels ---------------------------------------------------------------
     def label(self, name, note):
-        t = Text(name, font_size=36, color=DEFAULT_COLOR).to_edge(UP, buff=0.3)
-        s = Text(note, font_size=22, color=ACCENT_COLOR).next_to(t, DOWN,
-                                                                  buff=0.12)
+        t = (
+            Text(name, font_size=144, color=DEFAULT_COLOR)
+            .scale(0.25)
+            .to_edge(UP, buff=0.3)
+        )
+        s = (
+            Text(note, font_size=88, color=ACCENT_COLOR)
+            .scale(0.25)
+            .next_to(t, DOWN, buff=0.12)
+        )
         return VGroup(t, s)
 
     def swap_label(self, old, name, note, run_time=0.8):
@@ -463,16 +517,22 @@ class WorldProjections(ThreeDTIMCSlide):
         """Globe -> cylinder -> cut and unrolled -> stretched."""
         st = self.STEP_SECONDS
         self.play(self.wrap.animate.set_value(1.0), run_time=st)
-        self.move_camera(**self.FLAT_CAMERA, run_time=st + 0.5,
-                         added_anims=[self.unbend.animate.set_value(1.0)])
+        self.move_camera(
+            **self.FLAT_CAMERA,
+            run_time=st + 0.5,
+            added_anims=[self.unbend.animate.set_value(1.0)],
+        )
         self.play(self.stretch.animate.set_value(1.0), run_time=st)
 
     def rewrap(self):
         """The same three stages in reverse."""
         st = self.STEP_SECONDS
         self.play(self.stretch.animate.set_value(0.0), run_time=st)
-        self.move_camera(**self.GLOBE_CAMERA, run_time=st + 0.5,
-                         added_anims=[self.unbend.animate.set_value(0.0)])
+        self.move_camera(
+            **self.GLOBE_CAMERA,
+            run_time=st + 0.5,
+            added_anims=[self.unbend.animate.set_value(0.0)],
+        )
         self.play(self.wrap.animate.set_value(0.0), run_time=st)
 
     # ---- scene -----------------------------------------------------------------
@@ -487,13 +547,12 @@ class WorldProjections(ThreeDTIMCSlide):
 
         fills = self.build_fills()
         facets = self.build_facets()
-        grat = self.build_lines(1, GRATICULE_COLOR, self.GRATICULE_WIDTH,
-                                self.GRATICULE_OPACITY)
-        coast = self.build_lines(0, COAST_COLOR, self.COAST_WIDTH,
-                                 self.COAST_OPACITY)
+        grat = self.build_lines(
+            1, GRATICULE_COLOR, self.GRATICULE_WIDTH, self.GRATICULE_OPACITY
+        )
+        coast = self.build_lines(0, COAST_COLOR, self.COAST_WIDTH, self.COAST_OPACITY)
 
-        head = self.label("The globe",
-                          "every flat map has to tear or distort it somewhere")
+        head = self.label("The Globe", "Every 2D map has to compromise somehow")
         self.add_fixed_in_frame_mobjects(head)
         self.play(FadeIn(head))
         self.play(FadeIn(fills), FadeIn(grat), FadeIn(coast), run_time=1.5)
@@ -507,9 +566,11 @@ class WorldProjections(ThreeDTIMCSlide):
 
         # --- Mercator ---
         self.marked_next_slide()
-        head = self.swap_label(head, "Mercator",
-                               "cut, unroll, then stretch towards the poles "
-                               "to keep angles true")
+        head = self.swap_label(
+            head,
+            "Mercator Projection",
+            "A rectangular projection that keeps angles true",
+        )
         self.unwrap()
         self.marked_next_slide()
         self.rewrap()
@@ -517,8 +578,9 @@ class WorldProjections(ThreeDTIMCSlide):
         # --- Equal Earth ---
         self.marked_next_slide()
         self.mode = "equal_earth"
-        head = self.swap_label(head, "Equal Earth",
-                               "cut, unroll, then reshape to keep areas true")
+        head = self.swap_label(
+            head, "Equal Earth", "Ensure that areas are represented accurately"
+        )
         self.unwrap()
         self.marked_next_slide()
         self.rewrap()
@@ -526,24 +588,29 @@ class WorldProjections(ThreeDTIMCSlide):
         # --- Dymaxion: onto an icosahedron, then unfold ---
         self.marked_next_slide()
         self.mode = "dymaxion"
-        head = self.swap_label(head, "Dymaxion",
-                               "the globe projected onto an icosahedron")
-        self.play(self.wrap.animate.set_value(1.0),
-                  run_time=2 * self.STEP_SECONDS)
+        head = self.swap_label(
+            head, "Dymaxion", "The globe projected onto an icosahedron"
+        )
+        self.play(self.wrap.animate.set_value(1.0), run_time=self.STEP_SECONDS)
         self.marked_next_slide()
-        head = self.swap_label(head, "Dymaxion",
-                               "unfolded with every cut in the ocean: "
-                               "the continents stay whole")
-        self.move_camera(**self.FLAT_CAMERA, run_time=3 * self.STEP_SECONDS,
-                         added_anims=[self.unfold.animate.set_value(1.0)])
+        head = self.swap_label(
+            head, "Dymaxion", "Keep landmasses intact and local shapes accurate"
+        )
+        self.move_camera(
+            **self.FLAT_CAMERA,
+            run_time=2 * self.STEP_SECONDS,
+            added_anims=[self.unfold.animate.set_value(1.0)],
+        )
         self.marked_next_slide()
 
         # --- fold back up to the globe ---
-        self.move_camera(**self.GLOBE_CAMERA, run_time=2 * self.STEP_SECONDS,
-                         added_anims=[self.unfold.animate.set_value(0.0)])
-        head = self.swap_label(head, "The globe",
-                               "every flat map has to tear or distort it "
-                               "somewhere")
-        self.play(self.wrap.animate.set_value(0.0),
-                  run_time=2 * self.STEP_SECONDS)
+        self.move_camera(
+            **self.GLOBE_CAMERA,
+            run_time=self.STEP_SECONDS,
+            added_anims=[self.unfold.animate.set_value(0.0)],
+        )
+        head = self.swap_label(
+            head, "The Globe", "What to compromise is a task dependent decision"
+        )
+        self.play(self.wrap.animate.set_value(0.0), run_time=2 * self.STEP_SECONDS)
         self.marked_next_slide()

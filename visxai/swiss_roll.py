@@ -33,13 +33,12 @@ apply_defaults()
 # The swiss roll's centre line is the Archimedean spiral (t cos t, t sin t),
 # t in [1.5 pi, 4.5 pi]; the third coordinate is just height.
 #
-# The unrolling peels the roll like a carpet: at unroll u everything up to
-# arc length s_cut = (1 - u) * total is still spiralled, and past that the
-# strip is straight. u = 0 is the spiral, u = 1 is a straight line, and
-# every stage has the SAME arc length, so this is a genuine (isometric)
-# unrolling that runs equally well in either direction. The whole thing is
-# rotated so the flat part always lies along x (otherwise the peeling tail
-# swings the picture around) and re-centred.
+# The unrolling is pinned: the outer end of the sheet is fixed where it
+# finally lies (the right-hand end of the flat strip); everything already
+# unrolled lies flat on the "floor" and never moves; the rest keeps the
+# roll's shape, attached at the cut and tangent to the floor, and rolls along
+# as it unwinds. Arc length is preserved at every stage, so this is a genuine
+# (isometric) unrolling and runs equally well in either direction.
 # ---------------------------------------------------------------------------
 T_MIN, T_MAX = 1.5 * np.pi, 4.5 * np.pi
 GRID = 4000  # resolution of the arc-length grid
@@ -54,27 +53,45 @@ def spiral_grid():
     return t, s, theta - theta[0]
 
 
-def curve_at(u, s_grid, theta_grid):
-    """Points of the partially unrolled centre line on the arc-length grid."""
-    s_cut = (1.0 - u) * s_grid[-1]
-    th = np.interp(np.minimum(s_grid, s_cut), s_grid, theta_grid)
-    th = th - np.interp(s_cut, s_grid, theta_grid)  # flat part along +x
+def spiral_points(s_grid, theta_grid):
+    """The rolled centre line, integrated from its tangent angle."""
     ds = np.diff(s_grid)
-    cx, cy = np.cos(th), np.sin(th)
-    x = np.concatenate([[0], np.cumsum(ds * (cx[1:] + cx[:-1]) / 2)])
-    y = np.concatenate([[0], np.cumsum(ds * (cy[1:] + cy[:-1]) / 2)])
-    x -= x.mean()
-    y -= y.mean()
+    c, sn = np.cos(theta_grid), np.sin(theta_grid)
+    x = np.concatenate([[0], np.cumsum(ds * (c[1:] + c[:-1]) / 2)])
+    y = np.concatenate([[0], np.cumsum(ds * (sn[1:] + sn[:-1]) / 2)])
     return x, y
+
+
+def pinned_curve(u, s_grid, theta_grid, x0, y0, flip):
+    """Centre line on the arc-length grid at unroll fraction u (0 rolled,
+    1 flat). The outer end is pinned at the right-hand end of the final
+    strip (centred on 0, lying along y = 0); flip mirrors the roll to the
+    other side of the floor."""
+    S = s_grid[-1]
+    s_cut = (1 - u) * S
+    th_c = np.interp(s_cut, s_grid, theta_grid)
+    xc, yc = np.interp(s_cut, s_grid, x0), np.interp(s_cut, s_grid, y0)
+    c, sn = np.cos(-th_c), np.sin(-th_c)
+    dx, dy = x0 - xc, y0 - yc
+    rx, ry = c * dx - sn * dy, sn * dx + c * dy  # tangent -> +x
+    cut_x = S / 2 - (S - s_cut)
+    flat = s_grid >= s_cut
+    X = np.where(flat, S / 2 - (S - s_grid), cut_x + rx)
+    Y = np.where(flat, 0.0, ry)
+    return X, (-Y if flip else Y)
 
 
 # ---------------------------------------------------------------------------
 class SwissRollUnroll(ThreeDTIMCSlide):
     """Swiss roll in 3D, a full turn around it, then a reversible unroll.
 
-    Everything is driven by the `self.unroll` tracker (0 = rolled,
-    1 = flat), so animating it in either direction rolls or unrolls, and
-    anything attached with the helpers below follows along:
+    Everything is driven by two trackers: `self.place` (0 = roll centred on
+    screen; 0 -> 0.5 settles it back onto the floor line, a small move in
+    depth best done while the camera turns; 0.5 -> 1 slides it straight
+    sideways to the pinned end, ready to unroll) and
+    `self.unroll` (0 = rolled, 1 = flat). Animating them in either direction
+    rolls or unrolls, and anything attached with the helpers below follows
+    along:
 
         dot  = self.follower(i)            # marker on sample i
         line = self.connection(i, j)       # straight line between two samples
@@ -86,7 +103,8 @@ class SwissRollUnroll(ThreeDTIMCSlide):
     N_POINTS = 2000
     SEED = 0
     NOISE = 0.0  # sklearn's noise; keep 0 so the strip unrolls cleanly
-    SCALE = 0.135  # scene units per data unit (flat strip ~ 12 wide)
+    SCALE = 0.12  # scene units per data unit (flat strip ~ 10.7 wide;
+    # leaves room for the roll at the pinned end)
     HEIGHT_SCALE = 0.6  # sklearn's roll is as tall as it is wide, which
     # hides the spiral; a shorter roll reads better
     POINT_SIZE = 2.5
@@ -98,6 +116,7 @@ class SwissRollUnroll(ThreeDTIMCSlide):
     FLAT_CAMERA = dict(phi=78 * DEGREES, theta=-90 * DEGREES)
     SPIN_RATE = 0.5  # rad/s for the turn around the rolled data
     UNROLL_SECONDS = 6.0
+    PLACE_SECONDS = 2.0  # sliding the roll to the pinned end
 
     # ---- data ------------------------------------------------------------
     def setup_data(self):
@@ -109,26 +128,55 @@ class SwissRollUnroll(ThreeDTIMCSlide):
         # arc length of each sample, by interpolation on the grid
         t_grid = np.linspace(T_MIN, T_MAX, GRID)
         self.s = np.interp(t, t_grid, s_grid)
+        # pinned-unroll geometry: the rolled shape, which side of the floor
+        # the roll sits on (away from the camera), and the offset that
+        # centres the rolled-up roll on screen
+        self._x0, self._y0 = spiral_points(s_grid, theta_grid)
+        _, Y = pinned_curve(0.0, s_grid, theta_grid, self._x0, self._y0, False)
+        self._flip = bool(np.interp(self.s, s_grid, Y).mean() < 0)
+        X, Y = pinned_curve(0.0, s_grid, theta_grid, self._x0, self._y0, self._flip)
+        xs, ys = np.interp(self.s, s_grid, X), np.interp(self.s, s_grid, Y)
+        mid = lambda a: (a.max() + a.min()) / 2
+        self._roll_offset = np.array([mid(xs), mid(ys)])
         self.rgbas = np.array(
             [[*colormap_color(v, t.min(), t.max(), self.CMAP).to_rgb(), 1.0] for v in t]
         )
 
     def current_positions(self):
-        """(N, 3) sample positions at the current unroll value."""
-        u = self.unroll.get_value()
-        x, y = curve_at(u, self.s_grid, self.theta_grid)
-        px = np.interp(self.s, self.s_grid, x)
-        py = np.interp(self.s, self.s_grid, y)
-        # centre on the extent of the samples (they bunch towards the outer
-        # end of the roll, so the mean would sit off-centre)
-        mid = lambda a: (a.max() + a.min()) / 2
+        """(N, 3) sample positions at the current place / unroll values."""
+        return self.sheet_positions(self.s, self.height)
+
+    def sheet_positions(self, s_vals, h_vals):
+        """3D positions of any sheet coordinates (arc length along the roll,
+        height) at the current place / unroll values."""
+        X, Y = pinned_curve(
+            self.unroll.get_value(),
+            self.s_grid,
+            self.theta_grid,
+            self._x0,
+            self._y0,
+            self._flip,
+        )
+        place = self.place.get_value() if hasattr(self, "place") else 1.0
+        # first half: settle onto the floor line (depth); second half: slide
+        # straight sideways to the pinned end
+        depth = min(place / 0.5, 1.0)
+        side = max((place - 0.5) / 0.5, 0.0)
+        off = np.array(
+            [(1 - side) * self._roll_offset[0], (1 - depth) * self._roll_offset[1]]
+        )
+        mid_h = (self.height.max() + self.height.min()) / 2
         return (
             self.SCALE
-            * np.c_[px - mid(px), py - mid(py), self.height - mid(self.height)]
+            * np.c_[
+                np.interp(s_vals, self.s_grid, X) - off[0],
+                np.interp(s_vals, self.s_grid, Y) - off[1],
+                h_vals - mid_h,
+            ]
         )
 
     # ---- helpers for things attached to the data -------------------------
-    def follower(self, i, color=HIGHLIGHT_COLOR, radius=0.07):
+    def follower(self, i, color=HIGHLIGHT_COLOR, radius=0.15):
         """A dot that stays on sample i through the (un)rolling."""
         dot = Dot3D(self.current_positions()[i], radius=radius, color=color)
         dot.add_updater(lambda m: m.move_to(self.current_positions()[i]))
@@ -157,6 +205,7 @@ class SwissRollUnroll(ThreeDTIMCSlide):
     def construct(self):
         self.setup_data()
         self.unroll = ValueTracker(0.0)
+        self.place = ValueTracker(0.0)
 
         cloud = PMobject(stroke_width=self.POINT_SIZE)
         cloud.add_points(self.current_positions(), rgbas=self.rgbas)
@@ -176,21 +225,41 @@ class SwissRollUnroll(ThreeDTIMCSlide):
         self.wait(TAU / self.SPIN_RATE)
         self.stop_ambient_camera_rotation()
 
-        # --- slide: unroll
+        # --- slide: unroll (slide the roll to the pinned end, then unroll)
         self.marked_next_slide()
         self.move_camera(
             **self.FLAT_CAMERA,
-            added_anims=[self.unroll.animate.set_value(1.0)],
+            added_anims=[self.place.animate.set_value(0.5)],
+            run_time=self.PLACE_SECONDS,
+            rate_func=smooth,
+        )
+        self.play(
+            self.place.animate.set_value(1.0),
+            run_time=self.PLACE_SECONDS,
+            rate_func=smooth,
+        )
+        self.play(
+            self.unroll.animate.set_value(1.0),
             run_time=self.UNROLL_SECONDS,
             rate_func=smooth,
         )
         self.marked_next_slide()
 
         # --- slide: roll back up (the same animation in reverse)
+        self.play(
+            self.unroll.animate.set_value(0.0),
+            run_time=self.UNROLL_SECONDS,
+            rate_func=smooth,
+        )
+        self.play(
+            self.place.animate.set_value(0.5),
+            run_time=self.PLACE_SECONDS,
+            rate_func=smooth,
+        )
         self.move_camera(
             **self.ROLLED_CAMERA,
-            added_anims=[self.unroll.animate.set_value(0.0)],
-            run_time=self.UNROLL_SECONDS,
+            added_anims=[self.place.animate.set_value(0.0)],
+            run_time=self.PLACE_SECONDS,
             rate_func=smooth,
         )
         self.marked_next_slide()
@@ -205,8 +274,12 @@ class SwissRollUnroll(ThreeDTIMCSlide):
         # self.play(Create(near), FadeIn(ends))
         # self.marked_next_slide()
         # self.move_camera(**self.FLAT_CAMERA,
-        #                  added_anims=[self.unroll.animate.set_value(1.0)],
-        #                  run_time=self.UNROLL_SECONDS)
+        #                  added_anims=[self.place.animate.set_value(0.5)],
+        #                  run_time=self.PLACE_SECONDS)
+        # self.play(self.place.animate.set_value(1.0),
+        #           run_time=self.PLACE_SECONDS)
+        # self.play(self.unroll.animate.set_value(1.0),
+        #           run_time=self.UNROLL_SECONDS)
         #
         # Along-the-surface (geodesic) paths: pick samples ordered by t
         # between the two ends and draw a polyline through them, e.g.

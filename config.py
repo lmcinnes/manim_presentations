@@ -67,6 +67,7 @@ def apply_defaults():
     Mobject.set_default(color=DEFAULT_COLOR)
     Text.set_default(color=DEFAULT_COLOR, font=DEFAULT_FONT)
     Tex.set_default(tex_template=DEFAULT_TEX_TEMPLATE, color=DEFAULT_COLOR)
+    MathTex.set_default(tex_template=DEFAULT_TEX_TEMPLATE, color=DEFAULT_COLOR)
 
     print("Custom Manim configuration applied ✓")
 

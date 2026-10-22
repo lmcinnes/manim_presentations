@@ -44,7 +44,11 @@ from knn_edge_slides import NearestNeighbourEdgeSlide
 
 class MNISTNearestNeighbourSlide(NearestNeighbourEdgeSlide):
     DATA_FILE = Path(os.environ.get("MNIST_KNN", _HERE / "mnist_knn.npz"))
-    SHOWCASE_EDGES = None  # e.g. [17342, 35211, 24108, 19899, 56425]
+    SHOWCASE_EDGES = [
+        56425,
+        54911,
+        17342,
+    ]  # None  # e.g. [17342, 35211, 24108, 19899, 56425]
     BADGE_SCALE = 0.5
 
     def title_embedding(self):
@@ -53,12 +57,12 @@ class MNISTNearestNeighbourSlide(NearestNeighbourEdgeSlide):
     def title_all_edges(self):
         return (
             "Nearest neighbours in pixel space",
-            f"each digit joined to its single closest image "
+            f"Each digit joined to its single closest image "
             f"({self.dim} dimensions)",
         )
 
     def title_showcase(self, name_i, name_j):
         return (
             f"A {name_i} and a {name_j}: nearest neighbours",
-            "closest image in pixel space, from opposite ends of the map",
+            "Closest image in pixel space, from distinct map clusters",
         )

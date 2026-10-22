@@ -26,12 +26,15 @@ from data_generation import CircleEmbedding, CurvyLoopEmbedding, TorusEmbedding
 
 import numpy as np
 import colorcet
-from ripser import ripser
+
+# from ripser import ripser
 import sklearn.decomposition
 import sklearn.neighbors
 from scipy.stats import gaussian_kde
 from scipy.special import betaincinv, gammaln
 from scipy.stats import norm
+
+import ot
 
 apply_defaults()
 
