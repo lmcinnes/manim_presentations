@@ -40,6 +40,7 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    mixbox_interpolate_color,
 )
 
 apply_defaults()
@@ -68,7 +69,13 @@ PAIR_HEIGHT_JITTER = 0.03
 BULK_STD = 1.1  # other points: N(0, BULK_STD) truncated ...
 BULK_CAP = 2.05  # ... to |z| <= BULK_CAP
 SIGMA_MAX = 2.2  # in units of the circle radius
-SHORTCUT_ANGLE = PI  # 3 * PI / 4  # 1-NN edge spanning more than this = "shortcut"
+# Two different angles (they were one setting, which made the counter always
+# zero: no two points on a circle are more than PI apart):
+ACROSS_ANGLE = 3 * PI / 4  # an edge spanning more than this counts as
+# "across the circle" (the counter). Only the three engineered near-diameters
+# (176-178 degrees) qualify; every other 1-NN edge spans at most ~91 degrees.
+COLOUR_SPAN = PI  # edge colouring: angle / COLOUR_SPAN, 0 = adjacent,
+# 1 = diametrically opposite
 
 RADIUS_DISPLAY = 2.0  # scene units at sigma = 0
 MAX_LENGTH_DISPLAY = 11.0  # cylinder length is capped at this (uniform rescale)
@@ -103,7 +110,7 @@ def cyclic_color(u):
     """u in [0, 1) -> ManimColor interpolated around T_CYCLE."""
     x = (u % 1.0) * len(T_CYCLE)
     i = int(np.floor(x))
-    return interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)], x - i)
+    return mixbox_interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)], x - i)
 
 
 # ---------------------------------------------------------------------------
@@ -149,11 +156,15 @@ class NoisyCircle:
         j = D.argmin(1)
         return sorted({(min(i, int(k)), max(i, int(k))) for i, k in enumerate(j)})
 
-    def is_shortcut(self, i, j):
-        """Returns True if the angular distance across the circle exceeds SHORTCUT_ANGLE."""
+    def angle_between(self, i, j):
+        """Angle (radians, 0 to PI) between points i and j around the circle."""
         d_theta = abs(self.theta[i] - self.theta[j]) % (2 * np.pi)
-        d_theta = min(d_theta, 2 * np.pi - d_theta)
-        return d_theta > SHORTCUT_ANGLE
+        return min(d_theta, 2 * np.pi - d_theta)
+
+    def is_shortcut(self, i, j):
+        """True if the edge i-j goes across the circle (spans more than
+        ACROSS_ANGLE)."""
+        return self.angle_between(i, j) > ACROSS_ANGLE
 
     def display_scale(self, sigma):
         length = sigma * self.z_span * RADIUS_DISPLAY
@@ -211,18 +222,16 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
         edge_lines = []
 
         for i, j in edges:
-            # Calculate actual normalized angular distance across circle [0 = adjacent, 1 = diametrically opposite]
-            d_theta = abs(self.circle.theta[i] - self.circle.theta[j]) % (2 * np.pi)
-            d_theta = min(d_theta, 2 * np.pi - d_theta)
-            d = np.clip(d_theta / SHORTCUT_ANGLE, 0.0, 1.0)
+            # normalised angle across the circle: 0 = adjacent, 1 = opposite
+            d = np.clip(self.circle.angle_between(i, j) / COLOUR_SPAN, 0.0, 1.0)
 
             if d > 0.5:
                 t = np.sqrt(2 * (d - 0.5))
-                color = interpolate_color(COLOR_CYCLE[3], SHORTCUT_COLOR, t)
+                color = mixbox_interpolate_color(COLOR_CYCLE[3], SHORTCUT_COLOR, t)
                 width = interpolate(EDGE_WIDTH * 1.5, SHORTCUT_WIDTH, t)
             else:
                 t = np.sqrt(2 * d)
-                color = interpolate_color(EDGE_COLOR, COLOR_CYCLE[3], t)
+                color = mixbox_interpolate_color(EDGE_COLOR, COLOR_CYCLE[3], t)
                 width = interpolate(EDGE_WIDTH, EDGE_WIDTH * 1.5, t)
 
             edge_lines.append(Line(P[i], P[j], color=color, stroke_width=width))
@@ -271,13 +280,15 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
             .next_to(title, DOWN, buff=0.15)
         )
 
-        sig_lab = Text("noise / radius", color=DEFAULT_COLOR, font_size=0.72 * HUD_FONT)
+        # Marcellus kerns badly at small sizes: build at 48pt, then scale
+        label_scale = 0.72 * HUD_FONT / 48
+        sig_lab = Text("noise / radius", color=DEFAULT_COLOR).scale(label_scale)
         sig_eq = MathTex("=", color=DEFAULT_COLOR, font_size=HUD_FONT)
         sig_num = DecimalNumber(
             0.0, num_decimal_places=2, font_size=HUD_FONT, color=NUMBER_COLOR
         )
-        cut_lab = Text(
-            "edges across the circle", color=DEFAULT_COLOR, font_size=0.72 * HUD_FONT
+        cut_lab = Text("edges across the circle", color=DEFAULT_COLOR).scale(
+            label_scale
         )
         cut_eq = MathTex("=", color=DEFAULT_COLOR, font_size=HUD_FONT)
         cut_num = Integer(0, font_size=HUD_FONT, color=SHORTCUT_COLOR)
