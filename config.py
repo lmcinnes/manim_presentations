@@ -1,4 +1,5 @@
 from manim import *
+from manim.utils.color.core import color_to_int_rgb
 from manim_slides import Slide, ThreeDSlide
 import json
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import mixbox
 
 # Your color palette
 DEFAULT_COLOR = ManimColor("#2c3e63")
@@ -87,6 +89,11 @@ def colormap_color(value, vmin, vmax, cmap_name="plasma", power=1.0, invert=Fals
         normalized = 1.0 - normalized
     rgba = plt.get_cmap(cmap_name)(normalized**power)
     return rgb_to_color(rgba[:3])
+
+
+def mixbox_interpolate_color(color1, color2, t):
+    mix_color = mixbox.lerp(color_to_int_rgb(color1), color_to_int_rgb(color2), t)
+    return ManimColor(mix_color)
 
 
 def create_standard_axes(x_range=[-1, 10, 1], y_range=[-1, 10, 1], **kwargs):
