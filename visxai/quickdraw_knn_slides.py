@@ -45,7 +45,7 @@ from knn_edge_slides import NearestNeighbourEdgeSlide
 
 class QuickDrawNearestNeighbourSlide(NearestNeighbourEdgeSlide):
     DATA_FILE = Path(os.environ.get("QUICKDRAW_KNN", _HERE / "quickdraw_knn.npz"))
-    SHOWCASE_EDGES = [1924, 1571, 5221, 2284]
+    SHOWCASE_EDGES = [1924, 1571, 2284]
     POINT_SIZE = 2.5  # fewer points than MNIST: draw them larger
     EDGE_WIDTH = 0.6
     EDGE_OPACITY = 0.3
