@@ -8,6 +8,7 @@ dependencies = [
     "manim-slides>=4.1.0",
     "opencv-python>=4.13.0.92",
     "pot>=0.9.6.post1",
+    "pymixbox>=2.0.0",
 ]
 
 [tool.uv]
