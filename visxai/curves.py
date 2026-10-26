@@ -36,6 +36,9 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    cyclic_rgba,
+    make_heading,
+    SmallText,
 )
 
 apply_defaults()
@@ -55,6 +58,7 @@ SWEEP_SECONDS = 20.0  # duration of the noise ramp
 LOOP_SECONDS = 12.0  # one full turn in the looping slides
 POINT_SIZE = 3  # PMobject stroke width (pixel size of each point)
 HUD_FONT = 34
+FOOT_FONT = 16.32
 NUMBER_COLOR = DEFAULT_COLOR  # HIGHLIGHT_COLOR is pale as text on white
 PHI = 58 * DEGREES  # fixed camera elevation
 
@@ -62,24 +66,14 @@ PHI = 58 * DEGREES  # fixed camera elevation
 # residual SGD jitter between refits. 0 disables it. Display-only.
 UMAP_SMOOTH_FRAMES = 1.5
 
-# Cyclic colour map for the curve parameter t, built from the palette in
-# hue order (blue -> purple -> pink -> orange -> green -> cyan -> blue), so
-# the loop reads as a closed colour wheel and stays legible on white.
-T_CYCLE = [COLOR_CYCLE[i] for i in (0, 4, 3, 1, 2, 5)]
+# Colour for the curve parameter t: config.cyclic_rgba, the shared cyclic
+# map (blue -> purple -> pink -> orange -> green -> cyan -> blue), so the
+# loop reads as a closed colour wheel and stays legible on white.
 
 
 # ---------------------------------------------------------------------------
 # Data / geometry helpers
 # ---------------------------------------------------------------------------
-def cyclic_rgba(t):
-    stops = np.array([c.to_rgb() for c in T_CYCLE] + [T_CYCLE[0].to_rgb()])
-    u = (np.asarray(t) % (2 * np.pi)) / (2 * np.pi) * len(T_CYCLE)
-    i = np.floor(u).astype(int)
-    a = (u - i)[:, None]
-    rgb = (1 - a) * stops[i] + a * stops[i + 1]
-    return np.hstack([rgb, np.ones((len(rgb), 1))])
-
-
 def smooth_frames(E, sigma_frames):
     if sigma_frames <= 0:
         return E
@@ -168,7 +162,9 @@ class NoiseSweepSlideBase(ThreeDTIMCSlide):
                 "",
             ),
             (
-                Text("shortcut edges", color=DEFAULT_COLOR, font_size=0.72 * HUD_FONT),
+                SmallText(
+                    "shortcut edges", color=DEFAULT_COLOR, font_size=0.72 * HUD_FONT
+                ),
                 1,
                 lambda: 100 * float(data.interp(d["shortcut_frac"], f())),
                 r"\%",
@@ -208,21 +204,24 @@ class NoiseSweepSlideBase(ThreeDTIMCSlide):
 
     def footnote(self, one_line=False):
         if one_line:
-            return Text(
+            return SmallText(
                 "colour = true position along the loop   \u00b7   "
                 "shortcut = kNN edge spanning > 5% of the loop",
+                font_size=FOOT_FONT,
                 color=ACCENT_COLOR,
-            ).scale(0.34)
-        return (
-            VGroup(
-                Text("colour = true position along the loop", color=ACCENT_COLOR),
-                Text(
-                    "shortcut = kNN edge spanning > 5% of the loop", color=ACCENT_COLOR
-                ),
             )
-            .scale(0.34)
-            .arrange(DOWN, aligned_edge=LEFT, buff=0.08)
-        )
+        return VGroup(
+            SmallText(
+                "colour = true position along the loop",
+                font_size=FOOT_FONT,
+                color=ACCENT_COLOR,
+            ),
+            SmallText(
+                "shortcut = kNN edge spanning > 5% of the loop",
+                font_size=FOOT_FONT,
+                color=ACCENT_COLOR,
+            ),
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.08)
 
     def make_cloud(self, E, offset):
         off = np.asarray(offset, dtype=float)
@@ -303,19 +302,10 @@ class SpectralNoiseSlide(NoiseSweepSlideBase):
         return [self.make_cloud(E, self.OFFSET)]
 
     def build_overlay(self):
-        title = (
-            Text("Spectral embedding of the kNN graph", color=DEFAULT_COLOR)
-            .scale(0.6)
-            .to_edge(UP, buff=0.35)
-        )
-        sub = (
-            Text(
-                f"multi-plane loop in {self.data.D} dimensions, "
-                f"k = {self.data.k}, fixed noise directions",
-                color=ACCENT_COLOR,
-            )
-            .scale(0.32)
-            .next_to(title, DOWN, buff=0.15)
+        title, sub = make_heading(
+            "Spectral embedding of the kNN graph",
+            f"multi-plane loop in {self.data.D} dimensions, "
+            f"k = {self.data.k}, fixed noise directions",
         )
         hud = self.stack_rows(self.readout_rows(), buff=0.3)
         hud.to_edge(LEFT, buff=0.6).shift(UP * 0.3)
@@ -350,29 +340,16 @@ class SpectralVsUMAPSlide(NoiseSweepSlideBase):
         ]
 
     def build_overlay(self):
-        title = (
-            Text("Same noisy data, two embeddings", color=DEFAULT_COLOR)
-            .scale(0.6)
-            .to_edge(UP, buff=0.35)
+        title, sub = make_heading(
+            "Same noisy data, two embeddings",
+            f"multi-plane loop in {self.data.D} dimensions, "
+            f"k = {self.data.k} neighbours for both",
         )
-        sub = (
-            Text(
-                f"multi-plane loop in {self.data.D} dimensions, "
-                f"k = {self.data.k} neighbours for both",
-                color=ACCENT_COLOR,
-            )
-            .scale(0.32)
-            .next_to(title, DOWN, buff=0.15)
-        )
-        lab_l = (
-            Text("Spectral (kNN Laplacian)", color=DEFAULT_COLOR)
-            .scale(0.45)
-            .move_to([-self.OFFSET_X, 2.2, 0])
-        )
-        lab_r = (
-            Text("UMAP", color=DEFAULT_COLOR)
-            .scale(0.45)
-            .move_to([self.OFFSET_X, 2.2, 0])
+        lab_l = SmallText(
+            "Spectral (kNN Laplacian)", font_size=21.6, color=DEFAULT_COLOR
+        ).move_to([-self.OFFSET_X, 2.2, 0])
+        lab_r = SmallText("UMAP", font_size=21.6, color=DEFAULT_COLOR).move_to(
+            [self.OFFSET_X, 2.2, 0]
         )
         rows = self.readout_rows()
         col1 = self.stack_rows(rows[:2], buff=0.18)

@@ -38,6 +38,9 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    cyclic_color,
+    make_heading,
+    SmallText,
 )
 
 import os
@@ -46,6 +49,51 @@ from pathlib import Path
 import numpy as np
 
 apply_defaults()
+
+# ---------------------------------------------------------------------------
+# Fades for point clouds: Cairo draws PMobject points without alpha
+# compositing, so blend their RGB towards the background instead.
+# ---------------------------------------------------------------------------
+class PMFadeOut(Animation):
+    """FadeOut for a PMobject: blend its points' RGB to the background;
+    removed from the scene at the end."""
+
+    def __init__(self, mob: PMobject, **kwargs):
+        from manim.utils.color import color_to_rgba
+        self._orig_rgbas = mob.rgbas.copy()
+        self._bg_rgb = np.array(color_to_rgba(config.background_color)[:3],
+                                dtype=np.float64)
+        super().__init__(mob, remover=True, **kwargs)
+
+    def interpolate_mobject(self, alpha: float) -> None:
+        self.mobject.rgbas[:, :3] = ((1.0 - alpha) * self._orig_rgbas[:, :3]
+                                     + alpha * self._bg_rgb)
+
+
+class PMFadeIn(Animation):
+    """FadeIn for a PMobject: blend its points' RGB from the background to
+    their colours. Add the mobject to the scene before playing."""
+
+    def __init__(self, mob: PMobject, **kwargs):
+        from manim.utils.color import color_to_rgba
+        self._target_rgbas = mob.rgbas.copy()
+        self._bg_rgb = np.array(color_to_rgba(config.background_color)[:3],
+                                dtype=np.float64)
+        mob.rgbas[:, :3] = self._bg_rgb
+        super().__init__(mob, **kwargs)
+
+    def interpolate_mobject(self, alpha: float) -> None:
+        self.mobject.rgbas[:, :3] = ((1.0 - alpha) * self._bg_rgb
+                                     + alpha * self._target_rgbas[:, :3])
+
+
+def split_point_clouds(group):
+    """(point clouds, everything else at leaf level) in a panel group."""
+    clouds = [m for m in group.get_family() if isinstance(m, PMobject)]
+    others = [m for m in group.get_family()
+              if not isinstance(m, PMobject) and not m.submobjects]
+    return clouds, others
+
 
 _HERE = Path(__file__).resolve().parent
 DATA_FILE = Path(os.environ.get("KERNEL_LAYOUTS",
@@ -67,7 +115,9 @@ SWEEP_SECONDS = 3.0
 EVIDENCE_SECONDS = 5.0
 D_MAX, PULL_MAX = 4.0, 2.2
 CLASS_COLORS = COLOR_CYCLE[:10]
-T_CYCLE = [COLOR_CYCLE[i] for i in (0, 4, 3, 1, 2, 5)]   # circle colours
+D_TRUE, D_SPURIOUS = 0.8, 3.4      # a true neighbour and a spurious long edge
+TAIL_SWEEP = (0.33, 4.0)           # alpha values: tail m*alpha ~ 0.5 ... 6
+PULL_ARROW_SCALE = 1.25            # pull-meter bar length per unit of pull
 
 
 # ---------------------------------------------------------------------------
@@ -101,13 +151,6 @@ def curve(axes, f, y_max, color, width=4.5, opacity=1.0, n=240):
 # ---------------------------------------------------------------------------
 # Layout panels (evidence)
 # ---------------------------------------------------------------------------
-def cyclic_color(u):
-    x = (u % 1.0) * len(T_CYCLE)
-    i = int(np.floor(x))
-    return interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)],
-                             x - i)
-
-
 def frame_at(snaps, progress):
     f = progress * (len(snaps) - 1)
     i = int(np.clip(np.floor(f), 0, len(snaps) - 2))
@@ -127,10 +170,7 @@ def segments(P, E):
 class KernelKnobs(TIMCSlide):
 
     def heading(self, title, subtitle):
-        t = Text(title, color=DEFAULT_COLOR).scale(0.6).to_edge(UP, buff=0.3)
-        s = Text(subtitle, color=ACCENT_COLOR).scale(0.32).next_to(
-            t, DOWN, buff=0.12)
-        return VGroup(t, s)
+        return make_heading(title, subtitle)
 
     def arrow(self, start, end, color, angle):
         return CurvedArrow(start, end, angle=angle, color=color,
@@ -158,18 +198,19 @@ class KernelKnobs(TIMCSlide):
             cap = (f"m = {v:g}:  measured dim "
                    f"{float(d[f'mnist_m_{v:g}_dimension']):.2f}, recall "
                    f"{float(d[f'mnist_m_{v:g}_recall']):.2f}")
-            label = Text(cap, font_size=16, color=DEFAULT_COLOR).move_to(
+            label = SmallText(cap, font_size=16, color=DEFAULT_COLOR).move_to(
                 centre + 1.6 * UP)
             group.add(Group(pm, label))
         return group
 
-    def circle_panels(self, progress):
-        d = self.data
-        th, kept, short = d["circle_theta"], d["circle_kept"], d["circle_short"]
+    def ring_panels(self, progress, theta, kept, short, snap_list, captions,
+                    spacing):
+        """Rewired-circle layouts animating from their shared start as
+        `progress` goes 0 -> 1; shortcuts drawn in the tail colour."""
         group = VGroup()
-        for j, al in enumerate(d["circle_alphas"]):
-            snaps = d[f"circle_alpha_{al:g}"]
-            centre = np.array([(j - 1.5) * 3.5, -2.2, 0])
+        n = len(snap_list)
+        for j, (snaps, cap) in enumerate(zip(snap_list, captions)):
+            centre = np.array([(j - (n - 1) / 2) * spacing, -2.2, 0])
 
             def pos(snaps=snaps, centre=centre):
                 Y = frame_at(snaps, progress.get_value())
@@ -185,7 +226,7 @@ class KernelKnobs(TIMCSlide):
                 e.add_updater(lambda m_, pos=pos, E=E: m_.set_points(
                     segments(pos(), E)))
             dots = VGroup(*[Dot(radius=0.03, color=cyclic_color(t / TAU))
-                            for t in th])
+                            for t in theta])
 
             def move(g, pos=pos):
                 for dd, p in zip(g, pos()):
@@ -193,12 +234,34 @@ class KernelKnobs(TIMCSlide):
 
             move(dots)
             dots.add_updater(move)
-            name = ("  (spring-like)" if al >= 4 else
-                    "  (sceptical)" if al < 1 else "")
-            label = Text(f"alpha = {al:g}{name}", font_size=18,
-                         color=DEFAULT_COLOR).move_to(centre + 1.55 * UP)
+            label = SmallText(cap, font_size=18, color=DEFAULT_COLOR
+                              ).next_to(centre + 1.3 * UP, UP, buff=0)
             group.add(VGroup(e_true, e_short, dots, label))
         return group
+
+    def circle_panels(self, progress):
+        """The certainty dial: the rewired circle at several alpha (m = 2)."""
+        d = self.data
+        alphas = d["circle_alphas"]
+        caps = [f"alpha = {al:g}" + ("  (spring-like)" if al >= 4 else
+                                     "  (sceptical)" if al < 1 else "")
+                for al in alphas]
+        return self.ring_panels(
+            progress, d["circle_theta"], d["circle_kept"], d["circle_short"],
+            [d[f"circle_alpha_{al:g}"] for al in alphas], caps, 3.5)
+
+    def denoise_panels(self, progress):
+        """The denoising dial: a more heavily rewired circle at three tail
+        values m * alpha."""
+        d = self.data
+        tails = d["denoise_tails"]
+        caps = {0.5: "tail 0.5\ntoo sceptical: it breaks into clumps",
+                1.5: "tail 1.5\nthe circle",
+                6.0: "tail 6\ntoo trusting: the shortcuts drag it"}
+        return self.ring_panels(
+            progress, d["denoise_theta"], d["denoise_kept"],
+            d["denoise_short"], [d[f"denoise_tail_{t:g}"] for t in tails],
+            [caps.get(float(t), f"tail {t:g}") for t in tails], 4.6)
 
     # ---- scene -----------------------------------------------------------
     def construct(self):
@@ -220,35 +283,44 @@ class KernelKnobs(TIMCSlide):
         self.marked_next_slide()
 
         def note(text, color, pos):
-            return Text(text, font_size=22, color=color, line_spacing=0.8
-                        ).move_to(pos)
+            return SmallText(text, font_size=22, color=color, line_spacing=0.8
+                             ).move_to(pos)
 
+        # Each arrow leaves the middle of one edge of its note (from_dir) and
+        # arrives at one side of its parameter (to_dir); the bend (angle,
+        # positive = anticlockwise) is chosen from where things sit:
+        #   sigma0: note bottom-left, sigma0 right of centre -> leave the
+        #           note's right edge, sweep up into sigma0 from below
+        #   m:      note directly above m -> drop from its bottom edge
+        #   alpha:  note top-left, alpha at the centre -> leave the right
+        #           edge heading right, turn down onto alpha from above
+        #   tail:   note directly below the exponent -> rise from its top
         explained = [
             (sigma_in, [], SIGMA_COLOR,
              "units: the typical distance to a nearest\n"
              "neighbour -- it rescales the whole layout,\n"
-             "and nothing else", [-4.2, -2.3, 0], UR, DOWN, TAU / 8),
+             "and nothing else", [-4.2, -2.3, 0], RIGHT, DOWN, TAU / 4),
             (m_in, [], M_COLOR,
              "target intrinsic dimension: how\n"
              "space-filling the layout should be --\n"
              "1: compact clusters,  2: fills the plane",
-             [4.3, 2.35, 0], DL, UP, TAU / 8),
+             [4.3, 2.35, 0], DOWN, UP, TAU / 14),
             (alpha_in, [alpha_ex], ALPHA_COLOR,
              "certainty about the local density --\n"
              "large: density known, a spring;\n"
              "small: sceptical, long edges explained away",
-             [-4.05, 2.35, 0], DR, UP, -TAU / 8),
+             [-4.05, 2.35, 0], RIGHT, UP, -TAU / 4),
             (alpha_ex, [], TAIL_COLOR,
              "together, m and alpha set the tail:\n"
              "a long edge pulls like  m alpha / d --\n"
              "how hard a long, possibly spurious,\n"
              "edge can pull: the denoising dial",
-             [4.3, -2.35, 0], UL, DOWN, -TAU / 8),
+             [4.3, -2.35, 0], UP, DOWN, -TAU / 14),
         ]
         notes = VGroup()
         for part, also, color, text, pos, from_dir, to_dir, ang in explained:
             n = note(text, color, pos)
-            a = self.arrow(n.get_corner(from_dir) + 0.1 * from_dir,
+            a = self.arrow(n.get_critical_point(from_dir) + 0.1 * from_dir,
                            part.get_critical_point(to_dir) + 0.08 * to_dir,
                            color, ang)
             recolour = [p.animate.set_color(color) for p in [part, *also]
@@ -257,10 +329,10 @@ class KernelKnobs(TIMCSlide):
             notes.add(n, a)
             self.marked_next_slide()
 
-        k_line = Text("(counting k neighbours instead of one gives each point "
-                      "personal space, at a cost in neighbour recall -- we "
-                      "keep k = 1)", font_size=18, color=ACCENT_COLOR
-                      ).to_edge(DOWN, buff=0.3)
+        k_line = SmallText("(counting k neighbours instead of one gives each "
+                           "point personal space, at a cost in neighbour "
+                           "recall -- we keep k = 1)", font_size=18,
+                           color=ACCENT_COLOR).to_edge(DOWN, buff=0.3)
         self.play(FadeIn(k_line))
         self.marked_next_slide()
 
@@ -286,19 +358,21 @@ class KernelKnobs(TIMCSlide):
         ax_p = Axes(x_range=[0, D_MAX, 1], y_range=[0, PULL_MAX, 1], **kw)
         VGroup(ax_q, ax_p).arrange(RIGHT, buff=1.5).move_to(1.95 * DOWN)
         ax_labels = VGroup(
-            Text("probability of an edge", font_size=20).next_to(ax_q, UP, buff=0.1),
-            Text("attraction (pull)", font_size=20).next_to(ax_p, UP, buff=0.1),
-            Text("distance", font_size=18).next_to(ax_q.x_axis, DOWN, buff=0.12),
-            Text("distance", font_size=18).next_to(ax_p.x_axis, DOWN, buff=0.12),
+            SmallText("probability of an edge", font_size=20).next_to(ax_q, UP, buff=0.1),
+            SmallText("attraction (pull)", font_size=20).next_to(ax_p, UP, buff=0.1),
+            SmallText("distance", font_size=18).next_to(ax_q.x_axis, DOWN, buff=0.12),
+            SmallText("distance", font_size=18).next_to(ax_p.x_axis, DOWN, buff=0.12),
         ).set_color(DEFAULT_COLOR)
         ghost = VGroup(
             curve(ax_q, lambda d: q_kernel(d, *dflt), 1, CURVE_COLOR, 3,
                   GHOST_OPACITY),
             curve(ax_p, lambda d: pull(d, *dflt), PULL_MAX, CURVE_COLOR, 3,
                   GHOST_OPACITY))
-        live = always_redraw(lambda: VGroup(
-            curve(ax_q, lambda d: q_kernel(d, *params()), 1, CURVE_COLOR),
-            curve(ax_p, lambda d: pull(d, *params()), PULL_MAX, CURVE_COLOR)))
+        live_q = always_redraw(lambda: curve(
+            ax_q, lambda d: q_kernel(d, *params()), 1, CURVE_COLOR))
+        live_p = always_redraw(lambda: curve(
+            ax_p, lambda d: pull(d, *params()), PULL_MAX, CURVE_COLOR))
+        live = VGroup(live_q, live_p)
         plots = VGroup(ax_q, ax_p, ax_labels, ghost, live)
         self.play(Create(ax_q), Create(ax_p), FadeIn(ax_labels))
         self.add(ghost)
@@ -307,7 +381,7 @@ class KernelKnobs(TIMCSlide):
 
         def tag(part, text, color, side):
             """A short name for a parameter, with a small arrow."""
-            label = Text(text, font_size=24, color=color)
+            label = SmallText(text, font_size=24, color=color)
             label.next_to(part, side, buff=0.4)
             a = Arrow(label.get_edge_center(-side), part.get_edge_center(side),
                       buff=0.08, color=color, stroke_width=2.5,
@@ -327,12 +401,21 @@ class KernelKnobs(TIMCSlide):
 
         def evidence(panels, progress):
             """Swap the plots for layouts, play them, then swap back."""
-            self.play(FadeOut(plots), FadeIn(panels))
+            clouds, others = split_point_clouds(panels)
+            self.play(FadeOut(plots), run_time=0.6)
+            fade_ins = [PMFadeIn(c) for c in clouds]    # (sets them to bg)
+            self.add(*clouds)
+            self.play(*fade_ins, *[FadeIn(o) for o in others], run_time=0.8)
+            # register the panels themselves: some updaters (e.g. the one
+            # moving a panel's dots) live on groups, not on their leaves
+            self.add(panels)
             self.play(progress.animate.set_value(1.0),
                       run_time=EVIDENCE_SECONDS, rate_func=smooth)
             self.marked_next_slide()
-            self.remove(panels)          # point clouds don't fade
-            self.play(FadeIn(plots))
+            self.play(*[PMFadeOut(c) for c in clouds],
+                      *[FadeOut(o) for o in others], run_time=0.8)
+            self.remove(panels)
+            self.play(FadeIn(plots), run_time=0.6)
 
         tags = VGroup()
         knobs = [
@@ -356,15 +439,112 @@ class KernelKnobs(TIMCSlide):
                 self.marked_next_slide()
 
         # ---- the tail: m * alpha ----
+        def tail_now():
+            sg, mm, al = params()
+            return mm * al
+
         t = tag(alpha_ex, "denoising", TAIL_COLOR, RIGHT)
-        m0, a0 = DEFAULTS["m"], DEFAULTS["alpha"]
-        xs = np.linspace(m0 * a0 / PULL_MAX, D_MAX, 120)
-        asymptote = DashedVMobject(VMobject(
+        asymptote = always_redraw(lambda: DashedVMobject(VMobject(
             stroke_color=TAIL_COLOR, stroke_width=3).set_points_as_corners(
-            [ax_p.c2p(x, m0 * a0 / x) for x in xs]), num_dashes=30)
+            [ax_p.c2p(x, tail_now() / x) for x in np.linspace(
+                min(tail_now() / PULL_MAX, D_MAX - 0.1), D_MAX, 120)]),
+            num_dashes=30))
         asym_label = MathTex(r"\frac{m\alpha}{d}", font_size=30,
                              color=TAIL_COLOR).next_to(
-            ax_p.c2p(3.6, m0 * a0 / 3.6), UP, buff=0.12)
+            ax_p.c2p(3.6, tail_now() / 3.6), UP, buff=0.12)
         self.play(FadeIn(t))
         self.play(Create(asymptote), FadeIn(asym_label))
+        self.marked_next_slide()
+
+        # ---- what the tail means: a true edge against a spurious one ----
+        new_head = self.heading(
+            "How hard can a long edge pull?",
+            "a true neighbour sits close by; corruption adds long, "
+            "spurious edges")
+        # the picture replaces the edge-probability plot
+        live_q.clear_updaters()
+        self.play(FadeOut(ax_q, ax_labels[0], ax_labels[2], ghost[0], live_q,
+                          asym_label),
+                  FadeTransform(head, new_head))
+        head = new_head
+
+        left = ax_q.get_center()
+        unit = 1.05                       # scene units per unit of distance
+        x0 = left[0] - unit * D_SPURIOUS / 2
+        tug_key = SmallText("bars: how hard each edge pulls its ends "
+                            "together", font_size=18, color=ACCENT_COLOR
+                            ).move_to([left[0], left[1] + 1.55, 0])
+        rows = []
+        for k, (dist, name, col) in enumerate(
+                ((D_TRUE, "a true neighbour", DEFAULT_COLOR),
+                 (D_SPURIOUS, "a spurious long edge", TAIL_COLOR))):
+            y = left[1] + 0.75 - 1.45 * k
+            a_pt, b_pt = np.array([x0, y, 0]), np.array([x0 + unit * dist, y, 0])
+            edge = Line(a_pt, b_pt, color=col, stroke_width=3)
+            ends = VGroup(Dot(a_pt, radius=0.07, color=DEFAULT_COLOR),
+                          Dot(b_pt, radius=0.07, color=DEFAULT_COLOR))
+            lab = SmallText(name, font_size=20, color=col).next_to(
+                a_pt, UP, buff=0.18, aligned_edge=LEFT)
+            # a pull meter: all bars start at the same x, so they compare
+            meter = always_redraw(lambda y=y, dist=dist, col=col: Rectangle(
+                width=max(PULL_ARROW_SCALE * pull(dist, *params()), 0.02),
+                height=0.16, stroke_width=0, fill_color=col,
+                fill_opacity=0.85).move_to([x0, y - 0.32, 0], aligned_edge=LEFT))
+            rows.append(VGroup(edge, ends, lab, meter))
+
+        # matching markers on the pull curve
+        def marker(dist, col):
+            return always_redraw(lambda: VGroup(
+                DashedLine(ax_p.c2p(dist, 0),
+                           ax_p.c2p(dist, min(pull(dist, *params()),
+                                              PULL_MAX)),
+                           color=col, stroke_width=2, dash_length=0.06),
+                Dot(ax_p.c2p(dist, min(pull(dist, *params()), PULL_MAX)),
+                    radius=0.08, color=col)))
+
+        markers = VGroup(marker(D_TRUE, DEFAULT_COLOR),
+                         marker(D_SPURIOUS, TAIL_COLOR))
+        self.play(*[FadeIn(r) for r in rows], FadeIn(tug_key),
+                  FadeIn(markers))
+        self.marked_next_slide()
+
+        # ---- turn the dial ----
+        new_head = self.heading(
+            "The denoising dial",
+            "small: a long edge barely pulls, so the rest of the graph "
+            "keeps its ends apart; large: the layout follows it")
+        r = readout(2, r"m\alpha", TAIL_COLOR,
+                    lambda v: f"{DEFAULTS['m'] * v:.2f}")
+        self.play(FadeTransform(head, new_head), FadeIn(r))
+        head = new_head
+        verdict = always_redraw(lambda: SmallText(
+            "rejected: it barely pulls" if
+            pull(D_SPURIOUS, *params()) < 0.45 * pull(D_TRUE, *params()) else
+            "followed: it pulls nearly as hard" if
+            pull(D_SPURIOUS, *params()) > 0.8 * pull(D_TRUE, *params()) else
+            " ", font_size=22, color=TAIL_COLOR).move_to(
+            [left[0], rows[1][0].get_y() - 0.85, 0]))
+        self.add(verdict)
+        for target in (*TAIL_SWEEP, DEFAULTS["alpha"]):
+            self.play(P["alpha"].animate.set_value(np.log(target)),
+                      run_time=SWEEP_SECONDS, rate_func=smooth)
+            self.wait(0.6)
+        self.marked_next_slide()
+
+        # ---- the dial on a rewired circle: three tail values ----
+        new_head = self.heading(
+            "The dial on a rewired circle",
+            "25 random shortcuts: too sceptical loses the circle's own "
+            "structure, too trusting follows the shortcuts")
+        self.play(FadeOut(*rows, tug_key, markers, verdict, r, ax_p,
+                          ax_labels[1], ax_labels[3], ghost[1], live_p,
+                          asymptote),
+                  FadeTransform(head, new_head), run_time=0.8)
+        head = new_head
+        prog = ValueTracker(0.0)
+        panels = self.denoise_panels(prog)
+        self.play(FadeIn(panels), run_time=0.8)
+        self.add(panels)
+        self.play(prog.animate.set_value(1.0), run_time=EVIDENCE_SECONDS,
+                  rate_func=smooth)
         self.marked_next_slide()

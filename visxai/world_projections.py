@@ -19,6 +19,7 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
 )
 
 import os
@@ -491,17 +492,7 @@ class WorldProjections(ThreeDTIMCSlide):
 
     # ---- labels ---------------------------------------------------------------
     def label(self, name, note):
-        t = (
-            Text(name, font_size=144, color=DEFAULT_COLOR)
-            .scale(0.25)
-            .to_edge(UP, buff=0.3)
-        )
-        s = (
-            Text(note, font_size=88, color=ACCENT_COLOR)
-            .scale(0.25)
-            .next_to(t, DOWN, buff=0.12)
-        )
-        return VGroup(t, s)
+        return make_heading(name, note)
 
     def swap_label(self, old, name, note, run_time=0.8):
         """Cross-fade the heading (FadeTransform leaves a copy behind that

@@ -36,6 +36,8 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
+    SmallText,
 )
 
 import os
@@ -138,17 +140,7 @@ class MNISTHubsSlide(TIMCSlide):
 
     # ---- building blocks -------------------------------------------------
     def heading(self, title, subtitle):
-        t = (
-            Text(title, font_size=72, color=DEFAULT_COLOR)
-            .scale(0.33)
-            .to_edge(UP, buff=0.3)
-        )
-        s = (
-            Paragraph(subtitle, font_size=72, color=ACCENT_COLOR, alignment="center")
-            .scale(0.166)
-            .next_to(t, DOWN, buff=0.12)
-        )
-        return VGroup(t, s)
+        return make_heading(title, subtitle)
 
     def build_points(self):
         rgba = np.array([[*ManimColor(CLASS_COLORS[l]).to_rgb(), 1.0] for l in self.y])
@@ -160,8 +152,8 @@ class MNISTHubsSlide(TIMCSlide):
         badges = VGroup()
         for c in range(10):
             m = np.median(self.P[self.y == c], axis=0)
-            t = Text(str(c), color=darker(CLASS_COLORS[c], 0.5), weight=BOLD).scale(
-                0.45
+            t = SmallText(
+                str(c), font_size=21.6, color=darker(CLASS_COLORS[c], 0.5), weight=BOLD
             )
             disc = Circle(
                 radius=0.18,
@@ -199,10 +191,11 @@ class MNISTHubsSlide(TIMCSlide):
         and the images of its pointers, labelled with their digit."""
         rev = reverse_neighbours(self.idx, h)
         nk, tri = int(self.d["Nk"][h]), int(self.d["tri"][h])
-        header = Text(
+        header = SmallText(
             f"{kind} hub: a nearest neighbour of {nk} digits " f"({tri} triangles)",
+            font_size=14.4,
             color=darker(color, 0.35),
-        ).scale(0.3)
+        )
         x = PANEL_LEFT
         hub_img = digit_image(self.images[h])
         hub_img.move_to([x + IMAGE_SIZE / 2, y_row, 0])
@@ -213,7 +206,7 @@ class MNISTHubsSlide(TIMCSlide):
             img = digit_image(self.images[j])
             img.move_to([x + IMAGE_SIZE / 2, y_row, 0])
             same = self.y[j] == self.y[h]
-            lab = Text(
+            lab = SmallText(
                 str(self.y[j]),
                 font_size=18,
                 color=DEFAULT_COLOR if same else OTHER_DIGIT_COLOR,

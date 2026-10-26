@@ -41,6 +41,9 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    cyclic_color,
+    make_heading,
+    SmallText,
 )
 
 import numpy as np
@@ -61,7 +64,6 @@ TAIL_COLOR = COLOR_CYCLE[2]
 SHORTCUT_COLOR = HIGHLIGHT_COLOR
 EDGE_COLOR = DEFAULT_COLOR
 RUN_SECONDS = 8.0
-T_CYCLE = [COLOR_CYCLE[i] for i in (0, 4, 3, 1, 2, 5)]   # cyclic point colours
 
 
 # ---------------------------------------------------------------------------
@@ -139,20 +141,11 @@ def normalise(Y, centre, radius):
     return np.c_[Y, np.zeros(len(Y))] + centre
 
 
-def cyclic_color(u):
-    x = (u % 1.0) * len(T_CYCLE)
-    i = int(np.floor(x))
-    return interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)], x - i)
-
-
 # ---------------------------------------------------------------------------
 class LongTailRepair(TIMCSlide):
 
     def heading(self, title, subtitle):
-        t = Text(title, color=DEFAULT_COLOR).scale(0.6).to_edge(UP, buff=0.3)
-        s = Text(subtitle, color=ACCENT_COLOR).scale(0.32).next_to(
-            t, DOWN, buff=0.12)
-        return VGroup(t, s)
+        return make_heading(title, subtitle)
 
     def graph_mobjects(self, positions_fn, kept, shortcuts, dot_radius=0.05):
         """Dots, true edges and shortcut edges that follow positions_fn()."""
@@ -237,19 +230,19 @@ class LongTailRepair(TIMCSlide):
                     y_length=3.6, tips=False,
                     axis_config=dict(color=DEFAULT_COLOR, stroke_width=2)
                     ).move_to(0.5 * DOWN)
-        x_lab = Text("distance", font_size=24, color=DEFAULT_COLOR).next_to(
+        x_lab = SmallText("distance", font_size=24, color=DEFAULT_COLOR).next_to(
             axes.x_axis, DOWN, buff=0.25)
-        y_lab = Text("pull", font_size=24, color=DEFAULT_COLOR).next_to(
+        y_lab = SmallText("pull", font_size=24, color=DEFAULT_COLOR).next_to(
             axes.y_axis, LEFT, buff=0.25)
         spring = axes.plot(lambda d: 2 * d, x_range=[0, 1.5],
                            color=SPRING_COLOR, stroke_width=5)
         tail = axes.plot(lambda d: 2 * d / (1 + d * d), x_range=[0, 4],
                          color=TAIL_COLOR, stroke_width=5)
-        spring_lab = Text("spring: pulls harder the further apart",
-                          font_size=24, color=SPRING_COLOR).next_to(
+        spring_lab = SmallText("spring: pulls harder the further apart",
+                               font_size=24, color=SPRING_COLOR).next_to(
             axes.c2p(1.5, 3), RIGHT, buff=0.2)
-        tail_lab = Text("heavy tail: the pull fades with distance",
-                        font_size=24, color=TAIL_COLOR).next_to(
+        tail_lab = SmallText("heavy tail: the pull fades with distance",
+                             font_size=24, color=TAIL_COLOR).next_to(
             axes.c2p(2.6, 0.45), DOWN, buff=0.1)
         self.play(Create(axes), FadeIn(x_lab, y_lab))
         self.play(Create(spring), FadeIn(spring_lab))
@@ -283,7 +276,7 @@ class LongTailRepair(TIMCSlide):
                                  TAIL_COLOR)):
             d, e, s = self.graph_mobjects(positions(kind), kept, shortcuts,
                                           dot_radius=0.045)
-            title = Text(name, font_size=28, color=col).move_to(
+            title = SmallText(name, font_size=28, color=col).move_to(
                 centres[kind] + 2.5 * UP)
             panels[kind] = (VGroup(e, s, d), title)
             self.play(FadeIn(title), FadeIn(VGroup(e, s, d)), run_time=0.8)
@@ -295,12 +288,12 @@ class LongTailRepair(TIMCSlide):
 
         # ---- 5. the outcome ----
         notes = VGroup(
-            Text("the shortcuts pull hardest:\nthe circle is dragged out "
-                 "of shape", font_size=22, color=SPRING_COLOR,
-                 line_spacing=0.8).move_to(centres["spring"] + 3.05 * DOWN),
-            Text("the shortcuts give way, stretched long:\nthe circle "
-                 "recovers", font_size=22, color=TAIL_COLOR,
-                 line_spacing=0.8).move_to(centres["tail"] + 3.05 * DOWN))
+            SmallText("the shortcuts pull hardest:\nthe circle is dragged out "
+                      "of shape", font_size=22, color=SPRING_COLOR,
+                      line_spacing=0.8).move_to(centres["spring"] + 3.05 * DOWN),
+            SmallText("the shortcuts give way, stretched long:\nthe circle "
+                      "recovers", font_size=22, color=TAIL_COLOR,
+                      line_spacing=0.8).move_to(centres["tail"] + 3.05 * DOWN))
         new = self.heading("Repair needs long-tailed attraction",
                            "a few bad edges are outvoted by the rest of the "
                            "graph -- if their pull fades with distance")

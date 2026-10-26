@@ -25,7 +25,6 @@ original straight-line length on the roll (log scale, grey = unchanged).
 """
 
 from manim import *
-from manim.utils.color.core import color_to_int_rgb
 
 import sys
 
@@ -46,12 +45,14 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
+    mixbox_interpolate_color,
+    SmallText,
 )
 
 from pathlib import Path
 
 import numpy as np
-import mixbox
 
 sys.path.append(str(Path(__file__).resolve().parent))
 from swiss_roll import SwissRollUnroll
@@ -114,14 +115,7 @@ def stress_colour(v):
     """v = log2(length ratio), clipped to [0, STRESS_MAX]."""
     x = np.clip(v / STRESS_MAX, 0, 1) * (len(STRESS_STOPS) - 1)
     i = min(int(np.floor(x)), len(STRESS_STOPS) - 2)
-    # return interpolate_color(STRESS_STOPS[i], STRESS_STOPS[i + 1], x - i)
-    return ManimColor(
-        mixbox.lerp(
-            color_to_int_rgb(STRESS_STOPS[i]),
-            color_to_int_rgb(STRESS_STOPS[i + 1]),
-            x - i,
-        )
-    )
+    return mixbox_interpolate_color(STRESS_STOPS[i], STRESS_STOPS[i + 1], x - i)
 
 
 class SwissRollStory(SwissRollUnroll):
@@ -305,16 +299,16 @@ class SwissRollStory(SwissRollUnroll):
         ).arrange(RIGHT, buff=0)
         ticks = VGroup()
         for v, lab in ((0, "unchanged"), (1, "2x"), (2, "4x"), (np.log2(6), "6x")):
-            t = Text(lab, font_size=64, color=DEFAULT_COLOR).scale(0.25)
+            t = SmallText(lab, font_size=16, color=DEFAULT_COLOR)
             t.next_to(
                 cells.get_left() + (v / STRESS_MAX) * cells.width * RIGHT,
                 DOWN,
                 buff=0.16,
             )
             ticks.add(t)
-        title = Text(
-            "length now / length on the roll", font_size=72, color=ACCENT_COLOR
-        ).scale(0.25)
+        title = SmallText(
+            "length now / length on the roll", font_size=18, color=ACCENT_COLOR
+        )
         title.next_to(cells, UP, buff=0.16)
         return VGroup(cells, ticks, title).to_corner(DR, buff=0.45).shift(0.25 * UP)
 
@@ -364,17 +358,7 @@ class SwissRollStory(SwissRollUnroll):
         )
 
     def heading(self, title, subtitle):
-        t = (
-            Text(title, font_size=72, color=DEFAULT_COLOR)
-            .scale(0.375)
-            .to_edge(UP, buff=0.3)
-        )
-        s = (
-            Text(subtitle, font_size=72, color=ACCENT_COLOR)
-            .scale(0.375 / 2)
-            .next_to(t, DOWN, buff=0.12)
-        )
-        return VGroup(t, s)
+        return make_heading(title, subtitle)
 
     def swap_heading(self, old, title, subtitle, *anims, **kw):
         new = self.heading(title, subtitle)
@@ -461,16 +445,12 @@ class SwissRollWhyUnroll(SwissRollStory):
         up = Arrow3D(
             [x0 - 0.35, 0, z0], [x0 - 0.35, 0, z1], color=DEFAULT_COLOR, thickness=0.015
         )
-        lab_along = (
-            Text("position along the roll  (hue)", font_size=72, color=DEFAULT_COLOR)
-            .scale(0.33)
-            .move_to([0, 0, z0 - 0.75])
-        )
-        lab_up = (
-            Text("height  (lightness)", font_size=72, color=DEFAULT_COLOR)
-            .scale(0.33)
-            .move_to([x0 + 0.9, 0, z1 + 0.4])
-        )
+        lab_along = SmallText(
+            "position along the roll  (hue)", font_size=23.76, color=DEFAULT_COLOR
+        ).move_to([0, 0, z0 - 0.75])
+        lab_up = SmallText(
+            "height  (lightness)", font_size=23.76, color=DEFAULT_COLOR
+        ).move_to([x0 + 0.9, 0, z1 + 0.4])
         self.add_fixed_orientation_mobjects(lab_along, lab_up)
         head = self.swap_heading(
             head,
@@ -636,11 +616,9 @@ class SwissRollDistanceContrast(SwissRollStory):
         # ---- roll back up, keeping each line's stretched colour ----
         e_short.freeze()
         e_long.freeze()
-        new_title = (
-            Text("stretch when unrolled", font_size=64, color=ACCENT_COLOR)
-            .scale(0.25)
-            .move_to(bar[2])
-        )
+        new_title = SmallText(
+            "stretch when unrolled", font_size=16, color=ACCENT_COLOR
+        ).move_to(bar[2])
         self.add_fixed_in_frame_mobjects(new_title)
         head = self.swap_heading(
             head,

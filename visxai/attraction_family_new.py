@@ -44,6 +44,9 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
+    SmallText,
+    SmallTex,
 )
 
 import numpy as np
@@ -69,24 +72,19 @@ TABLE_HEAD_SIZE = 52                 # ... and at the head of the final table
 
 
 def txt(text, size, color=DEFAULT_COLOR):
-    """Marcellus text built at 48pt and scaled (small sizes kern badly)."""
-    return Text(text, font_size=48, color=color).scale(size / 48)
+    return SmallText(text, font_size=size, color=color)
 
 
 def tex(text, size, color=DEFAULT_COLOR):
-    """Text with inline maths ($...$), built at 48pt and scaled; newlines
-    are line breaks (each line in an \\mbox so TeX does not re-wrap it)."""
-    lines = [r"\mbox{" + line + "}" for line in text.split("\n")]
-    return Tex(r"\\ ".join(lines), font_size=48, color=color).scale(size / 48)
+    """size is a Tex font size (see config.TEX_TO_TEXT)."""
+    return SmallTex(text, font_size=size, color=color)
 
 
 # ---------------------------------------------------------------------------
 class AttractionFamily(TIMCSlide):
 
     def heading(self, title, subtitle):
-        t = tex(title, 29).to_edge(UP, buff=0.3)
-        s = tex(subtitle, 19, ACCENT_COLOR).next_to(t, DOWN, buff=0.12)
-        return VGroup(t, s)
+        return make_heading(title, subtitle, title_tex=True, subtitle_tex=True)
 
     def swap(self, old, title, subtitle, *anims):
         new = self.heading(title, subtitle)

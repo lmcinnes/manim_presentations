@@ -21,6 +21,7 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    SmallText,
 )
 from data_generation import CircleEmbedding, CurvyLoopEmbedding, TorusEmbedding
 
@@ -35,17 +36,6 @@ from scipy.special import betaincinv, gammaln
 from scipy.stats import norm
 
 import ot
-
-
-def SmallText(text, font_size=48, **kwargs):
-    """Text, built at 48pt and scaled to font_size (Marcellus kerns badly at
-    small sizes). Text with newlines becomes a centred Paragraph."""
-    if "\n" in text:
-        mob = Paragraph(*text.split("\n"), font_size=48, alignment="center",
-                        **kwargs)
-    else:
-        mob = Text(text, font_size=48, **kwargs)
-    return mob.scale(font_size / 48)
 
 
 def shrink_row(items, left=-6.9, gap=0.4, stroke_power=0.5):

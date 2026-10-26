@@ -41,6 +41,9 @@ from config import (
     colormap_color,
     create_logo,
     mixbox_interpolate_color,
+    cyclic_color,
+    make_heading,
+    SmallText,
 )
 
 apply_defaults()
@@ -101,16 +104,8 @@ FACE_ON = dict(phi=90 * DEGREES, theta=0 * DEGREES)
 FAR_FOCAL = 400.0
 OBLIQUE = dict(phi=72 * DEGREES, theta=-58 * DEGREES)
 
-# point colours: cyclic map from the palette, in hue order (as in the
+# point colours: config.cyclic_color, the shared cyclic map (as in the
 # embedding slides, so "colour = position along the loop" carries over)
-T_CYCLE = [COLOR_CYCLE[i] for i in (0, 4, 3, 1, 2, 5)]
-
-
-def cyclic_color(u):
-    """u in [0, 1) -> ManimColor interpolated around T_CYCLE."""
-    x = (u % 1.0) * len(T_CYCLE)
-    i = int(np.floor(x))
-    return mixbox_interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)], x - i)
 
 
 # ---------------------------------------------------------------------------
@@ -265,30 +260,20 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
         edges = self.build_edges()
 
         # ---- overlay (screen space) ----
-        title = (
-            Text("Why noise creates shortcuts", color=DEFAULT_COLOR)
-            .scale(0.6)
-            .to_edge(UP, buff=0.35)
-        )
-        sub = (
-            Text(
-                "a circle, its nearest-neighbour edges, and noise in "
-                "one direction orthogonal to it",
-                color=ACCENT_COLOR,
-            )
-            .scale(0.32)
-            .next_to(title, DOWN, buff=0.15)
+        title, sub = make_heading(
+            "Why noise creates shortcuts",
+            "a circle, its nearest-neighbour edges, and noise in "
+            "one direction orthogonal to it",
         )
 
-        # Marcellus kerns badly at small sizes: build at 48pt, then scale
-        label_scale = 0.72 * HUD_FONT / 48
-        sig_lab = Text("noise / radius", color=DEFAULT_COLOR).scale(label_scale)
+        label_size = 0.72 * HUD_FONT
+        sig_lab = SmallText("noise / radius", font_size=label_size, color=DEFAULT_COLOR)
         sig_eq = MathTex("=", color=DEFAULT_COLOR, font_size=HUD_FONT)
         sig_num = DecimalNumber(
             0.0, num_decimal_places=2, font_size=HUD_FONT, color=NUMBER_COLOR
         )
-        cut_lab = Text("edges across the circle", color=DEFAULT_COLOR).scale(
-            label_scale
+        cut_lab = SmallText(
+            "edges across the circle", font_size=label_size, color=DEFAULT_COLOR
         )
         cut_eq = MathTex("=", color=DEFAULT_COLOR, font_size=HUD_FONT)
         cut_num = Integer(0, font_size=HUD_FONT, color=SHORTCUT_COLOR)
@@ -316,13 +301,17 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
 
         key_local = VGroup(
             Line(ORIGIN, RIGHT * 0.5, color=EDGE_COLOR, stroke_width=EDGE_WIDTH),
-            Text("nearest neighbour, along the circle", color=ACCENT_COLOR).scale(0.3),
+            SmallText(
+                "nearest neighbour, along the circle", font_size=14.4, color=ACCENT_COLOR
+            ),
         ).arrange(RIGHT, buff=0.15)
         key_short = VGroup(
             Line(
                 ORIGIN, RIGHT * 0.5, color=SHORTCUT_COLOR, stroke_width=SHORTCUT_WIDTH
             ),
-            Text("nearest neighbour, across the circle", color=ACCENT_COLOR).scale(0.3),
+            SmallText(
+                "nearest neighbour, across the circle", font_size=14.4, color=ACCENT_COLOR
+            ),
         ).arrange(RIGHT, buff=0.15)
         key = (
             VGroup(key_local, key_short)
@@ -332,12 +321,12 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
         )
 
         caption = (
-            Text(
+            SmallText(
                 "in high dimensions the noise spreads over many "
                 "orthogonal directions; here it is packed into one",
+                font_size=14.4,
                 color=ACCENT_COLOR,
             )
-            .scale(0.3)
             .next_to(sub, DOWN, buff=0.12)
         )
 

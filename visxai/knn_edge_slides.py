@@ -34,6 +34,8 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
+    SmallText,
 )
 
 apply_defaults()
@@ -172,10 +174,7 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
 
     # ---- building blocks -------------------------------------------------
     def heading(self, texts):
-        title, subtitle = texts
-        t = Text(title, color=DEFAULT_COLOR).scale(0.6).to_edge(UP, buff=0.3)
-        s = Text(subtitle, color=ACCENT_COLOR).scale(0.32).next_to(t, DOWN, buff=0.12)
-        return VGroup(t, s)
+        return make_heading(*texts)
 
     def build_points(self):
         rgba = np.array(
@@ -192,8 +191,12 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
             if not len(members):
                 continue
             m = np.median(members, axis=0)
-            t = Text(name, color=darker(CLASS_COLORS[c], 0.5), weight=BOLD)
-            t.scale(self.BADGE_SCALE)
+            t = SmallText(
+                name,
+                font_size=48 * self.BADGE_SCALE,
+                color=darker(CLASS_COLORS[c], 0.5),
+                weight=BOLD,
+            )
             back = RoundedRectangle(
                 width=max(t.width + 0.22, 0.4),
                 height=t.height + 0.18,
@@ -215,8 +218,10 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
         frame = SurroundingRectangle(
             img, buff=0.12, color=col, stroke_width=3, corner_radius=0.08
         )
-        cap = Text(self.caption(self.names[lab]), color=darker(col, INK_DARKEN)).scale(
-            0.45
+        cap = SmallText(
+            self.caption(self.names[lab]),
+            font_size=21.6,
+            color=darker(col, INK_DARKEN),
         )
         cap.next_to(frame, DOWN, buff=0.15)
         panel = Group(frame, img, cap)

@@ -19,6 +19,7 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
 )
 
 import numpy as np
@@ -211,7 +212,7 @@ class SwissRollUnroll(ThreeDTIMCSlide):
         cloud.add_points(self.current_positions(), rgbas=self.rgbas)
         cloud.add_updater(lambda m: m.set(points=self.current_positions()))
 
-        title = Text("The swiss roll", font_size=36).to_edge(UP, buff=0.35)
+        title = make_heading("The swiss roll")
         self.add_fixed_in_frame_mobjects(title)
 
         self.set_camera_orientation(**self.ROLLED_CAMERA)

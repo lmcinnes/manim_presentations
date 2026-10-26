@@ -223,6 +223,7 @@ visxai/mnist_cache/
 visxai/quickdraw_cache/
 visxai/world_cache/
 visxai/*.mp4
+visxai/build_logs/
 *.npz
 
 # Output files

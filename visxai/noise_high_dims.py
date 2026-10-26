@@ -37,6 +37,9 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
+    SmallText,
+    SmallTex,
 )
 
 import numpy as np
@@ -52,11 +55,7 @@ PLOT_SIGMA, PLOT_DELTA = 0.1, 0.5      # the example pair in the plot
 class NoiseInHighDimensions(TIMCSlide):
 
     def heading(self, title, subtitle):
-        t = Text(title, color=DEFAULT_COLOR).scale(0.6).to_edge(UP, buff=0.3)
-        # \mbox stops TeX from wrapping the line at its own text width
-        s = Tex(r"\mbox{" + subtitle + "}", color=ACCENT_COLOR,
-                font_size=19).next_to(t, DOWN, buff=0.12)
-        return VGroup(t, s)
+        return make_heading(title, subtitle, subtitle_tex=True)
 
     def swap(self, old, title, subtitle, *anims):
         new = self.heading(title, subtitle)
@@ -66,8 +65,7 @@ class NoiseInHighDimensions(TIMCSlide):
     def note(self, text, color=ACCENT_COLOR, size=24):
         """A note in the slide font; inline maths in $...$, line breaks as
         newlines."""
-        lines = [r"\mbox{" + line + "}" for line in text.split("\n")]
-        return Tex(r"\\ ".join(lines), font_size=size * 1.15, color=color)
+        return SmallTex(text, font_size=size * 1.15, color=color)
 
     def construct(self):
         # ---- 1. the model ----
@@ -186,8 +184,8 @@ class NoiseInHighDimensions(TIMCSlide):
         cross = DashedLine(ax.c2p(np.log10(d_star), 0),
                            ax.c2p(np.log10(d_star), 3), color=ACCENT_COLOR,
                            stroke_width=2)
-        cross_lab = Text("structure drops\nbelow the jitter", font_size=17,
-                         color=ACCENT_COLOR, line_spacing=0.8).next_to(
+        cross_lab = SmallText("structure drops\nbelow the jitter", font_size=17,
+                              color=ACCENT_COLOR, line_spacing=0.8).next_to(
             ax.c2p(np.log10(d_star), 0.35), RIGHT, buff=0.12)
         self.play(Write(approx))
         self.play(FadeIn(parts))

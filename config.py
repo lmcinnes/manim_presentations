@@ -96,6 +96,92 @@ def mixbox_interpolate_color(color1, color2, t):
     return ManimColor(mix_color)
 
 
+# Cyclic colour wheel (blue -> purple -> pink -> orange -> green -> cyan),
+# shared by every slide that colours points by position around a loop.
+T_CYCLE = [COLOR_CYCLE[i] for i in (0, 4, 3, 1, 2, 5)]
+
+
+def cyclic_color(u):
+    """u in [0, 1) -> ManimColor mixed (mixbox) around T_CYCLE."""
+    x = (u % 1.0) * len(T_CYCLE)
+    i = int(np.floor(x)) % len(T_CYCLE)
+    return mixbox_interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)], x - i)
+
+
+def cyclic_rgba(t):
+    """Angles t (radians, array) -> (n, 4) RGBA floats mixed around T_CYCLE,
+    for PMobject point colours."""
+    stops = [c.to_rgb() for c in T_CYCLE]
+    u = (np.asarray(t, float) % (2 * np.pi)) / (2 * np.pi) * len(T_CYCLE)
+    i = np.floor(u).astype(int) % len(T_CYCLE)
+    a = u - np.floor(u)
+    rgb = np.array(
+        [
+            mixbox.lerp_float(stops[k], stops[(k + 1) % len(T_CYCLE)], w)
+            for k, w in zip(i, a)
+        ]
+    ).reshape(-1, 3)
+    return np.hstack([rgb, np.ones((len(rgb), 1))])
+
+
+# ============================================================================
+# SMALL TEXT
+# ============================================================================
+# Marcellus kerns badly when Pango renders it small, so Text is always built
+# at TEXT_BUILD_SIZE and scaled down. TeX output is unaffected, but at equal
+# font_size it comes out TEX_TO_TEXT times the size of Text.
+TEXT_BUILD_SIZE = 48
+TEX_TO_TEXT = 0.75
+
+HEADING_TITLE_SIZE = 28.8
+HEADING_SUBTITLE_SIZE = 15.36
+
+
+def SmallText(text, font_size=TEXT_BUILD_SIZE, **kwargs):
+    """Text, built at 48pt and scaled to font_size. Text with newlines
+    becomes a centred Paragraph."""
+    if "\n" in text:
+        mob = Paragraph(
+            *text.split("\n"), font_size=TEXT_BUILD_SIZE, alignment="center", **kwargs
+        )
+    else:
+        mob = Text(text, font_size=TEXT_BUILD_SIZE, **kwargs)
+    return mob.scale(font_size / TEXT_BUILD_SIZE)
+
+
+def SmallTex(text, font_size=DEFAULT_FONT_SIZE, **kwargs):
+    """Text with inline maths ($...$) in the slide font; newlines are centred
+    line breaks (each line in an \\mbox so TeX does not re-wrap it).
+    font_size is a Tex font size (see TEX_TO_TEXT)."""
+    lines = [r"\mbox{" + line + "}" for line in text.split("\n")]
+    return Tex(r"\\ ".join(lines), font_size=font_size, **kwargs)
+
+
+def make_heading(
+    title,
+    subtitle=None,
+    title_tex=False,
+    subtitle_tex=False,
+    title_color=DEFAULT_COLOR,
+    subtitle_color=ACCENT_COLOR,
+):
+    """Standard slide heading: title at the top, optional subtitle below.
+    Use *_tex=True for strings containing inline maths."""
+
+    def build(text, size, color, use_tex):
+        if use_tex:
+            return SmallTex(text, font_size=size / TEX_TO_TEXT, color=color)
+        return SmallText(text, font_size=size, color=color)
+
+    t = build(title, HEADING_TITLE_SIZE, title_color, title_tex)
+    t.to_edge(UP, buff=0.3)
+    if subtitle is None:
+        return VGroup(t)
+    s = build(subtitle, HEADING_SUBTITLE_SIZE, subtitle_color, subtitle_tex)
+    s.next_to(t, DOWN, buff=0.12)
+    return VGroup(t, s)
+
+
 def create_standard_axes(x_range=[-1, 10, 1], y_range=[-1, 10, 1], **kwargs):
     """Create axes with standard defaults."""
     axes_config = DEFAULT_AXES_CONFIG.copy()

@@ -33,6 +33,7 @@ from config import (
     PhaseSlide,
     colormap_color,
     create_logo,
+    make_heading,
 )
 
 import itertools
@@ -61,10 +62,7 @@ STAGES = [                 # (s, caption): the point moves to s * its start
 class CubeHubSlide(ThreeDTIMCSlide):
 
     def heading(self, title, subtitle):
-        t = Text(title, color=DEFAULT_COLOR).scale(0.6).to_edge(UP, buff=0.3)
-        s = Text(subtitle, color=ACCENT_COLOR).scale(0.32).next_to(
-            t, DOWN, buff=0.12)
-        return VGroup(t, s)
+        return make_heading(title, subtitle)
 
     def swap_heading(self, old, title, subtitle):
         new = self.heading(title, subtitle)

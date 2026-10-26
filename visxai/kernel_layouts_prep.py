@@ -13,6 +13,9 @@ Objective: edges pull with -log q, non-edges push with -gamma log(1 - q).
 Runs:
   * circle: the rewired circle graph (as in long_tail_repair.py), exact
     all-pairs repulsion, Adam, one run per alpha from the same spectral start
+  * denoise: a more heavily rewired circle at three tail values m * alpha
+    (too sceptical: it breaks into clumps; default: the circle; too
+    trusting: the shortcuts drag it out of shape)
   * MNIST (6,000 digits): 15-NN graph, UMAP-style negative sampling, one run
     per m and per k, all from the same spectral start; with measurements of
     output dimension, neighbour recall and cluster separation
@@ -29,6 +32,10 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "kernel_layouts.npz"
 
 CIRCLE_ALPHAS = (8.0, 2.0, 1.0, 0.5)
+# the denoising dial: a more heavily rewired circle, laid out at three tail
+# values m * alpha (m fixed at the scene default)
+DENOISE_SHORTCUTS, DENOISE_MISSING = 25, 40
+DENOISE_M, DENOISE_TAILS = 1.5, (0.5, 1.5, 6.0)
 MNIST_M = (1.0, 1.5, 2.0)
 MNIST_K = (1, 4, 8)
 BASE = dict(sigma0=1.0, m=1.5, alpha=1.0, k=1)
@@ -120,6 +127,24 @@ def circle_layout(Y0, edges, kern, gamma, steps=1500, lr=0.02, every=15):
 def roundness(Y):
     r = np.linalg.norm(Y - Y.mean(0), axis=1)
     return float(r.std() / r.mean())
+
+
+def denoise_layouts(gamma):
+    """The heavily rewired circle at each tail value in DENOISE_TAILS."""
+    theta, kept, short = corrupted_circle(n_short=DENOISE_SHORTCUTS,
+                                          n_miss=DENOISE_MISSING)
+    obs = np.r_[kept, short]
+    start = spectral(obs, len(theta))
+    out = dict(denoise_theta=theta, denoise_kept=kept, denoise_short=short,
+               denoise_tails=np.array(DENOISE_TAILS))
+    for tail in DENOISE_TAILS:
+        t0 = time.time()
+        kern = dict(sigma0=1.0, m=DENOISE_M, alpha=tail / DENOISE_M, k=1)
+        snaps = circle_layout(start, obs, kern, gamma)
+        out[f"denoise_tail_{tail:g}"] = snaps
+        print(f"denoise tail {tail:g}: roundness {roundness(snaps[-1]):.3f} "
+              f"({time.time() - t0:.0f} s)", flush=True)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +251,9 @@ def main():
         arrays[f"circle_alpha_{al:g}"] = snaps
         print(f"circle alpha {al:g}: roundness {roundness(snaps[-1]):.3f} "
               f"({time.time() - t0:.0f} s)", flush=True)
+
+    # ---- circle: the denoising dial (tail m * alpha) ----
+    arrays.update(denoise_layouts(gamma))
 
     # ---- MNIST: m and k ----
     X, y = load_mnist(MNIST_N)
