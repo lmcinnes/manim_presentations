@@ -1,0 +1,43 @@
+# Slide order for the visxai deck, read by build.py.
+#
+# One scene per line:   module.py SceneName
+# Lines starting with # are ignored (comment a scene out to drop it).
+# The order below is a first draft -- rearrange freely.
+
+# ---- maps of the world: every projection compromises ----
+world_projections.py WorldProjections
+
+# ---- the swiss roll: which distances to keep ----
+# swiss_roll.py SwissRollUnroll
+swiss_roll_story.py SwissRollWhyUnroll
+swiss_roll_story.py SwissRollDistanceContrast
+
+# ---- high-dimensional geometry ----
+high_dimensions.py SphereShellVolume
+high_dimensions.py BallInBoxVolume
+high_dimensions.py EquatorBandArea
+high_dimensions.py ShadedNNDistribution
+# high_dimensions.py ExampleCircleEmbeddingConstruction
+
+# ---- nearest neighbours in real data ----
+mnist_knn_slides.py MNISTNearestNeighbourSlide
+quickdraw_knn_slides.py QuickDrawNearestNeighbourSlide
+
+# ---- noise and shortcuts ----
+noise_high_dims.py NoiseInHighDimensions
+noise_intuition.py CircleNoiseIntuition
+# curves.py SpectralNoiseSlide
+# curves.py SpectralVsUMAPSlide
+
+# ---- hubs ----
+cube_hub.py CubeHubSlide
+mnist_hubs_slides.py MNISTHubsSlide
+
+# ---- repairing with long-tailed attraction ----
+long_tail_repair.py LongTailRepair
+attraction_family_new.py AttractionFamily
+# attraction_family.py AttractionFamily        (older version)
+kernel_knobs.py KernelKnobs
+
+# ---- conclusion ----
+conclusion.py Conclusion
