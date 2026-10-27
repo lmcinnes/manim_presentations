@@ -22,6 +22,7 @@ from config import (
     colormap_color,
     create_logo,
     SmallText,
+    HEADING_FONT,
 )
 from data_generation import CircleEmbedding, CurvyLoopEmbedding, TorusEmbedding
 
@@ -959,7 +960,9 @@ class EquatorBandArea(ThreeDTIMCSlide):
             )
         )
 
-        title = SmallText("Which equator?", font_size=40).to_edge(UP, buff=0.4)
+        title = SmallText("Which equator?", font_size=40, font=HEADING_FONT).to_edge(
+            UP, buff=0.4
+        )
         self.add_fixed_in_frame_mobjects(title)
         self.play(Write(title))
 

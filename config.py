@@ -38,6 +38,13 @@ DEFAULT_TEX_TEMPLATE.output_format = ".xdv"
 DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\usepackage{fontspec}")
 DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\setmainfont{Marcellus}")
 
+HEADING_FONT = "Marcellus SC"
+HEADING_TEX_TEMPLATE = TexTemplate()
+HEADING_TEX_TEMPLATE.tex_compiler = "xelatex"
+HEADING_TEX_TEMPLATE.output_format = ".xdv"
+HEADING_TEX_TEMPLATE.add_to_preamble(r"\usepackage{fontspec}")
+HEADING_TEX_TEMPLATE.add_to_preamble(r"\setmainfont{" + HEADING_FONT + "}")
+
 # ============================================================================
 # AXES DEFAULTS
 # ============================================================================
@@ -165,19 +172,21 @@ def make_heading(
     title_color=DEFAULT_COLOR,
     subtitle_color=ACCENT_COLOR,
 ):
-    """Standard slide heading: title at the top, optional subtitle below.
-    Use *_tex=True for strings containing inline maths."""
+    """Standard slide heading: title (in HEADING_FONT) at the top, optional
+    subtitle below. Use *_tex=True for strings containing inline maths."""
 
-    def build(text, size, color, use_tex):
+    def build(text, size, color, use_tex, is_title):
         if use_tex:
-            return SmallTex(text, font_size=size / TEX_TO_TEXT, color=color)
-        return SmallText(text, font_size=size, color=color)
+            kw = {"tex_template": HEADING_TEX_TEMPLATE} if is_title else {}
+            return SmallTex(text, font_size=size / TEX_TO_TEXT, color=color, **kw)
+        kw = {"font": HEADING_FONT} if is_title else {}
+        return SmallText(text, font_size=size, color=color, **kw)
 
-    t = build(title, HEADING_TITLE_SIZE, title_color, title_tex)
+    t = build(title, HEADING_TITLE_SIZE, title_color, title_tex, True)
     t.to_edge(UP, buff=0.3)
     if subtitle is None:
         return VGroup(t)
-    s = build(subtitle, HEADING_SUBTITLE_SIZE, subtitle_color, subtitle_tex)
+    s = build(subtitle, HEADING_SUBTITLE_SIZE, subtitle_color, subtitle_tex, False)
     s.next_to(t, DOWN, buff=0.12)
     return VGroup(t, s)
 

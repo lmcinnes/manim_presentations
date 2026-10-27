@@ -4,6 +4,10 @@
 # Lines starting with # are ignored (comment a scene out to drop it).
 # The order below is a first draft -- rearrange freely.
 
+# ---- title and intro ----
+introduction.py introduction
+encodings.py VisualEncodings
+
 # ---- maps of the world: every projection compromises ----
 world_projections.py WorldProjections
 

@@ -528,6 +528,11 @@ class WorldProjections(ThreeDTIMCSlide):
 
     # ---- scene -----------------------------------------------------------------
     def construct(self):
+
+        # Intro:
+        self.add_centered_text("We can't keep everything")
+
+        # ---- Projections -------------------------------------------
         self.setup_data()
         self.mode = "mercator"
         self.wrap = ValueTracker(0.0)
@@ -605,3 +610,10 @@ class WorldProjections(ThreeDTIMCSlide):
         )
         self.play(self.wrap.animate.set_value(0.0), run_time=2 * self.STEP_SECONDS)
         self.marked_next_slide()
+
+        self.add_centered_text(
+            "With no specific task in mind, what kind of projection should we use?"
+        )
+        self.marked_next_slide()
+
+        self.new_section("Finding structure")

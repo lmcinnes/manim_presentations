@@ -385,6 +385,18 @@ class SwissRollWhyUnroll(SwissRollStory):
     SPIN_RATE = 1.0
 
     def construct(self):
+
+        self.add_centered_text(
+            "Without known structure we have to hope we can discover it from the data"
+        )
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text(
+            "We then have to hope it can be unpacked into a few dimensions"
+        )
+        self.marked_next_slide()
+        self.clear_slide()
+
         cloud = self.setup_scene()
         head = self.swap_heading(
             None,
@@ -473,6 +485,7 @@ class SwissRollShortDistances(SwissRollStory):
     N_SHORT = 1200
 
     def construct(self):
+
         self.setup_scene()
         pairs = self.short_pairs(self.N_SHORT)
         cloud = self.points_cloud()
