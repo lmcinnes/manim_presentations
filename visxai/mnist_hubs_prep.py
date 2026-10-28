@@ -89,7 +89,8 @@ def reverse_neighbours(idx):
 
 
 # ---------------------------------------------------------------------------
-def find_pairs(y, idx, emb, hub_quantile, same_class_slack):
+def find_pairs(y, idx, emb, hub_quantile, same_class_slack, bad_frac_min=0.5,
+               min_classes=3):
     Nk = np.bincount(idx.ravel(), minlength=len(y))
     bad_occ = np.bincount(idx.ravel(), weights=(y[idx] != y[:, None]).ravel(),
                           minlength=len(y)).astype(int)
@@ -98,7 +99,8 @@ def find_pairs(y, idx, emb, hub_quantile, same_class_slack):
     tri, clust = local_stats(idx)
     bad_frac = bad_occ / np.maximum(Nk, 1)
     thr = np.quantile(Nk, hub_quantile)
-    bad = np.flatnonzero((Nk >= thr) & (bad_frac >= 0.5) & (n_classes >= 3))
+    bad = np.flatnonzero((Nk >= thr) & (bad_frac >= bad_frac_min)
+                         & (n_classes >= min_classes))
     good = np.flatnonzero((Nk >= thr) & (bad_frac <= 0.05))
     print(f"hubs: N_k >= {thr:.0f}; {len(bad)} bad hubs, {len(good)} good hubs")
 
@@ -125,9 +127,11 @@ def find_pairs(y, idx, emb, hub_quantile, same_class_slack):
 
 
 def contact_sheets(pairs, y, images, emb, rev, stats, out, per_page=6,
-                   n_pages=5, n_show=12):
+                   n_pages=5, n_show=12, names=None):
     """Pages in the style used for hand-picking: map with each hub's
-    incoming edges, plus the hub and its pointers as images."""
+    incoming edges, plus the hub and its pointers as images. `names` maps
+    labels to display names (default: the label itself)."""
+    name = (lambda c: str(c)) if names is None else (lambda c: str(names[c]))
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -149,21 +153,21 @@ def contact_sheets(pairs, y, images, emb, rev, stats, out, per_page=6,
                 for j in rev[h]:
                     ax.plot(*emb[[h, j]].T, color=col, lw=0.9)
                 ax.scatter(*emb[h], s=80, c=col, edgecolor="k", zorder=5)
-            ax.set_title(f"pair ({b}, {g}): bad '{y[b]}' (red) vs good "
-                         f"'{y[g]}' (green)", fontsize=9)
+            ax.set_title(f"pair ({b}, {g}): bad '{name(y[b])}' (red) vs good "
+                         f"'{name(y[g])}' (green)", fontsize=9)
             ax.axis("off")
             sub = gs[r, 1].subgridspec(2, n_show + 1)
             for rr, (h, col) in enumerate(((g, "green"), (b, "red"))):
                 a0 = fig.add_subplot(sub[rr, 0])
                 a0.imshow(255 - images[h].reshape(28, 28), cmap="gray")
                 a0.axis("off")
-                a0.set_title(f"hub '{y[h]}'\nN_k {Nk[h]} bad {bo[h]}\n"
+                a0.set_title(f"hub '{name(y[h])}'\nN_k {Nk[h]} bad {bo[h]}\n"
                              f"tri {tri[h]:.0f}", fontsize=7, color=col)
                 for c, j in enumerate(rev[h][:n_show]):
                     a = fig.add_subplot(sub[rr, c + 1])
                     a.imshow(255 - images[j].reshape(28, 28), cmap="gray")
                     a.axis("off")
-                    a.set_title(str(y[j]), fontsize=8,
+                    a.set_title(name(y[j]), fontsize=8,
                                 color="black" if y[j] == y[h] else "red")
         plt.tight_layout()
         path = Path(out).with_name(f"{Path(out).stem}.candidates_"

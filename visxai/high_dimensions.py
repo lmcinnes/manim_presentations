@@ -49,11 +49,12 @@ def shrink_row(items, left=-6.9, gap=0.4, stroke_power=0.5):
         target = group.copy().scale(scale)
         for m in target.get_family():
             if isinstance(m, VMobject) and m.get_stroke_width() > 0:
-                m.set_stroke(width=m.get_stroke_width() * scale ** stroke_power)
+                m.set_stroke(width=m.get_stroke_width() * scale**stroke_power)
         target.move_to([x + target.width / 2, 0, 0])
         x += target.width + gap
         anims.append(Transform(group, target))
     return anims
+
 
 apply_defaults()
 
@@ -68,6 +69,16 @@ def rotation_matrix_to_axis_angle(R):
     )
 
     return axis, angle
+
+
+class HighDimensionsIntro(TIMCSlide):
+    def construct(self):
+        self.add_centered_text("So far we have built intuitions from low dimensions")
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text("Intuitions for high dimensions are much harder")
+        self.marked_next_slide()
+        self.clear_slide()
 
 
 class SphereShellVolume(ThreeDTIMCSlide):
@@ -259,7 +270,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
         )
         self.wait()
         self.marked_next_slide()
-        # self.clear_slide()
+        self.clear_slide()
 
 
 class ShadedNNDistribution(TIMCSlide):
@@ -485,7 +496,7 @@ def value_table(header, rows, font_size=30):
         x = 0.0
         for j, c in enumerate(r):
             c.move_to([x + col_w[j], -i * row_h, 0], aligned_edge=RIGHT)
-            x += col_w[j] + 0.5
+            x += col_w[j] + 0.25
             grid.add(c)
     rule = Line(
         grid.get_corner(UL), grid.get_corner(UR), color=ACCENT_COLOR, stroke_width=2
@@ -660,8 +671,11 @@ class BallInBoxVolume(ThreeDTIMCSlide):
             ratio_value_nd.animate.next_to(n_box, DOWN, buff=0.75),
         )
         n_d_case = VGroup(n_ball, n_box, ratio_value_nd)
-        self.play(*shrink_row([(two_d_case, 0.5), (three_d_case, 0.5),
-                               (n_d_case, 0.6)], gap=0.3))
+        self.play(
+            *shrink_row(
+                [(two_d_case, 0.5), (three_d_case, 0.5), (n_d_case, 0.6)], gap=0.3
+            )
+        )
 
         dims = [2, 3, 4, 5, 10, 20, 100]
         table = (
@@ -671,7 +685,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
                     [str(n), sci_tex(ball_to_box_ratio(n)), f"{np.sqrt(n) / 2:.2f}"]
                     for n in dims
                 ],
-                font_size=26,
+                font_size=24,
             )
             .to_edge(RIGHT, buff=0.35)
             .set_y(0)
@@ -701,6 +715,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
         self.play(Create(frame_box))
         self.wait()
         self.marked_next_slide()
+        self.clear_slide()
 
 
 # ---------------------------------------------------------------------------
@@ -915,8 +930,11 @@ class EquatorBandArea(ThreeDTIMCSlide):
             h_value_nd.animate.next_to(n_band, DOWN, buff=0.75),
         )
         n_d_case = VGroup(n_sphere, n_band, h_value_nd)
-        self.play(*shrink_row([(two_d_case, 0.5), (three_d_case, 0.5),
-                               (n_d_case, 0.6)], gap=0.3))
+        self.play(
+            *shrink_row(
+                [(two_d_case, 0.5), (three_d_case, 0.5), (n_d_case, 0.6)], gap=0.3
+            )
+        )
 
         dims = [2, 3, 5, 10, 100, 1000, 10000]
         table = (
@@ -980,8 +998,8 @@ class EquatorBandArea(ThreeDTIMCSlide):
         # sphere is drawn on top; faces on the far side are drawn beneath
         # them, dimmed, as if seen through the sphere. Where bands overlap,
         # the moving band is on top, then the ghosts in the order left.
-        BAND_OUT, BACK_DIM = 1.0, 0.3     # bands on the sphere itself
-        tracked = []                       # (band, opacity tracker, z order)
+        BAND_OUT, BACK_DIM = 1.0, 0.3  # bands on the sphere itself
+        tracked = []  # (band, opacity tracker, z order)
 
         def make_band(color):
             Rs = Rb * BAND_OUT
@@ -991,14 +1009,14 @@ class EquatorBandArea(ThreeDTIMCSlide):
                 latitude_circle(Rs, -ab, color, 1.5),
             ).rotate(self.TILT, axis=RIGHT, about_point=ORIGIN)
             for face in band[0]:
-                face.shade_in_3d = False   # ordered by depth_cue instead
+                face.shade_in_3d = False  # ordered by depth_cue instead
             return band
 
         def depth_cue(dt):
             for band, opacity, order in tracked:
                 o = opacity.get_value()
                 for face in band[0]:
-                    front = face.get_center()[2] >= 0    # camera looks down z
+                    front = face.get_center()[2] >= 0  # camera looks down z
                     face.set_fill(opacity=o if front else o * BACK_DIM)
                     face.set_stroke(opacity=o if front else o * BACK_DIM)
                     face.z_index = order if front else -2 + 0.01 * order
@@ -1062,3 +1080,7 @@ class EquatorBandArea(ThreeDTIMCSlide):
         self.play(FadeOut(point), Write(conclusion))
         self.wait()
         self.marked_next_slide()
+
+        self.clear_slide()
+
+        self.new_section("In Practice?")

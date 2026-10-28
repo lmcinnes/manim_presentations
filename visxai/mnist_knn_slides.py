@@ -42,6 +42,14 @@ sys.path.append(str(_HERE))  # shared module lives next to this file
 from knn_edge_slides import NearestNeighbourEdgeSlide
 
 
+class KNNSlidesIntro(TIMCSlide):
+
+    def construct(self):
+        self.add_centered_text("In high dimensions we get strange phenomena")
+        self.marked_next_slide()
+        self.clear_slide()
+
+
 class MNISTNearestNeighbourSlide(NearestNeighbourEdgeSlide):
     DATA_FILE = Path(os.environ.get("MNIST_KNN", _HERE / "mnist_knn.npz"))
     SHOWCASE_EDGES = [

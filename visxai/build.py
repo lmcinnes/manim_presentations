@@ -41,8 +41,9 @@ RUN = ["uv", "run", "--active"]
 #  * mnist_knn / quickdraw_knn both use knn_edge_prep.py. Re-running them (or
 #    mnist_hubs) can change the edge / pair indices hand-picked in
 #    SHOWCASE_EDGES (mnist_knn_slides.py, quickdraw_knn_slides.py) and PAIRS
-#    (mnist_hubs_slides.py): check the *.candidates*.png sheets afterwards.
-#  * quickdraw_knn downloads doodles and a DINOv2 model (cached in
+#    (mnist_hubs_slides.py, quickdraw_hubs_slides.py): check the
+#    *.candidates*.png sheets afterwards.
+#  * quickdraw_knn / quickdraw_hubs download doodles and a DINOv2 model (cached in
 #    quickdraw_cache/). The existing quickdraw_knn.npz has 25 pre-selected
 #    showcase edges (default --n-show is 5); that only affects pre-selection.
 #  * world_map: --cell 0.5 --colours 256 match the existing world_map.npz
@@ -54,6 +55,7 @@ PREP_STEPS = [
     ("mnist_knn", ["mnist_knn_prep.py"], ["mnist_knn.npz"]),
     ("quickdraw_knn", ["quickdraw_knn_prep.py"], ["quickdraw_knn.npz"]),
     ("mnist_hubs", ["mnist_hubs_prep.py"], ["mnist_hubs.npz"]),
+    ("quickdraw_hubs", ["quickdraw_hubs_prep.py"], ["quickdraw_hubs.npz"]),
     ("kernel_layouts", ["kernel_layouts_prep.py"], ["kernel_layouts.npz"]),
     (
         "world_map",

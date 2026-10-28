@@ -5,7 +5,7 @@
 # The order below is a first draft -- rearrange freely.
 
 # ---- title and intro ----
-introduction.py introduction
+introduction.py Introduction
 encodings.py VisualEncodings
 
 # ---- maps of the world: every projection compromises ----
@@ -17,10 +17,11 @@ swiss_roll_story.py SwissRollWhyUnroll
 swiss_roll_story.py SwissRollDistanceContrast
 
 # ---- high-dimensional geometry ----
+high_dimensions.py HighDimensionsIntro
 high_dimensions.py SphereShellVolume
 high_dimensions.py BallInBoxVolume
 high_dimensions.py EquatorBandArea
-high_dimensions.py ShadedNNDistribution
+# high_dimensions.py ShadedNNDistribution
 # high_dimensions.py ExampleCircleEmbeddingConstruction
 
 # ---- nearest neighbours in real data ----

@@ -531,6 +531,8 @@ class WorldProjections(ThreeDTIMCSlide):
 
         # Intro:
         self.add_centered_text("We can't keep everything")
+        self.marked_next_slide()
+        self.clear_slide()
 
         # ---- Projections -------------------------------------------
         self.setup_data()
@@ -555,7 +557,7 @@ class WorldProjections(ThreeDTIMCSlide):
         self.add(fills, facets, grat, coast)
 
         # --- a turn around the globe (loops seamlessly) ---
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.begin_ambient_camera_rotation(rate=self.SPIN_RATE)
         self.wait(TAU / self.SPIN_RATE)
         self.stop_ambient_camera_rotation()
@@ -610,6 +612,10 @@ class WorldProjections(ThreeDTIMCSlide):
         )
         self.play(self.wrap.animate.set_value(0.0), run_time=2 * self.STEP_SECONDS)
         self.marked_next_slide()
+        self.clear_slide()
+        self.set_camera_orientation(
+            phi=0 * DEGREES, theta=-90 * DEGREES, gamma=0 * DEGREES
+        )
 
         self.add_centered_text(
             "With no specific task in mind, what kind of projection should we use?"

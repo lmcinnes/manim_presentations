@@ -405,7 +405,7 @@ class SwissRollWhyUnroll(SwissRollStory):
         )
         self.play(FadeIn(cloud), run_time=1.5)
         self.add(cloud)
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.spin_once()
 
         # ---- the sheet they were sampled from ----
@@ -419,7 +419,7 @@ class SwissRollWhyUnroll(SwissRollStory):
             FadeOut(cloud),
             run_time=2,
         )
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.spin_once(direction=-1)
 
         # ---- unroll it ----
@@ -502,7 +502,7 @@ class SwissRollShortDistances(SwissRollStory):
         )
         self.add(cloud)
         self.play(Create(edges), run_time=2)
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.spin_once()
 
         self.marked_next_slide()
@@ -545,7 +545,7 @@ class SwissRollLongDistances(SwissRollStory):
         )
         self.add(cloud)
         self.play(Create(edges), run_time=2)
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.spin_once()
 
         self.marked_next_slide()
@@ -577,6 +577,11 @@ class SwissRollDistanceContrast(SwissRollStory):
     POINT_SIZE = 5.0
 
     def construct(self):
+
+        self.add_centered_text("If unrolling is natural, what are we giving up?")
+        self.marked_next_slide()
+        self.clear_slide()
+
         self.setup_scene()
         head = self.swap_heading(
             None,
@@ -587,7 +592,7 @@ class SwissRollDistanceContrast(SwissRollStory):
         self.set_camera_orientation(theta=self.ROLLED_CAMERA["theta"] - TAU)
         self.play(FadeIn(cloud), run_time=1.5)
         self.add(cloud)
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         short = self.short_pairs(self.N_SHORT)
         long_ = self.long_pairs(self.N_RANDOM, self.N_ENDS)
         e_short = self.stress_edges(short, width=0.5)
@@ -605,7 +610,7 @@ class SwissRollDistanceContrast(SwissRollStory):
         # self.add(cloud)
         self.play(Create(e_short), run_time=1.5)
         self.play(Create(e_long), run_time=1.5)
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.spin_once()
 
         self.marked_next_slide()
@@ -647,6 +652,8 @@ class SwissRollDistanceContrast(SwissRollStory):
             "Why was it good to drop the long distances?",
             "They cut across the gaps between layers where there is no sheet",
         )
-        self.marked_next_slide(loop=True)
+        self.marked_next_slide()
         self.spin_once()
         self.marked_next_slide()
+
+        self.new_section("High Dimensions")
