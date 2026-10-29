@@ -40,6 +40,7 @@ cube_hub.py CubeHubSlide
 quickdraw_hubs_slides.py QuickDrawHubsSlide
 
 # ---- repairing with long-tailed attraction ----
+long_tail_repair.py RepairIntro
 long_tail_repair.py LongTailRepair
 attraction_family_new.py AttractionFamily
 # attraction_family.py AttractionFamily        (older version)

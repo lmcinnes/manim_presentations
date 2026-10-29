@@ -20,6 +20,7 @@ the rest of the graph stretch the shortcuts and the circle recovers.
 
 The layouts take a few seconds and are computed at render time.
 """
+
 from manim import *
 
 import sys
@@ -53,7 +54,7 @@ apply_defaults()
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
-N, HALF = 120, 5           # points; each joined to HALF neighbours either side
+N, HALF = 120, 5  # points; each joined to HALF neighbours either side
 N_SHORTCUTS, N_MISSING = 10, 30
 SEED = 1
 STEPS, SNAPSHOT_EVERY = 1500, 15
@@ -76,18 +77,21 @@ def gap(a, b):
 
 # derivative (in s = d^2) of attraction phi and of repulsion rho
 KERNELS = {
-    "spring": (lambda s: 1.0 + 0 * s,
-               lambda s: -np.exp(-s) / (1 - np.exp(-s) + 1e-12)),
-    "tail": (lambda s: 1 / (1 + s),
-             lambda s: -1 / (s * (1 + s) + 1e-12)),
+    "spring": (lambda s: 1.0 + 0 * s, lambda s: -np.exp(-s) / (1 - np.exp(-s) + 1e-12)),
+    "tail": (lambda s: 1 / (1 + s), lambda s: -1 / (s * (1 + s) + 1e-12)),
 }
 
 
 def corrupted_circle():
     rng = np.random.default_rng(SEED)
     theta = 2 * np.pi * (np.arange(N) + 0.3 * rng.uniform(-1, 1, N)) / N
-    true = sorted({(min(i, (i + s) % N), max(i, (i + s) % N))
-                   for i in range(N) for s in range(1, HALF + 1)})
+    true = sorted(
+        {
+            (min(i, (i + s) % N), max(i, (i + s) % N))
+            for i in range(N)
+            for s in range(1, HALF + 1)
+        }
+    )
     shortcuts = set()
     while len(shortcuts) < N_SHORTCUTS:
         a, b = rng.choice(N, 2, replace=False)
@@ -117,17 +121,17 @@ def layout(Y0, edges, kernel, lr=0.02):
     snaps = [Y.copy()]
     for t in range(1, STEPS + 1):
         diff = Y[:, None] - Y[None]
-        s = (diff ** 2).sum(-1)
+        s = (diff**2).sum(-1)
         R = drho(s + np.eye(n))
         np.fill_diagonal(R, 0)
         g = GAMMA * 2 * (R[:, :, None] * diff).sum(1)
         e = Y[a] - Y[b]
-        pull = dphi((e ** 2).sum(1))[:, None] * 2 * e
+        pull = dphi((e**2).sum(1))[:, None] * 2 * e
         np.add.at(g, a, pull)
         np.add.at(g, b, -pull)
         m = 0.9 * m + 0.1 * g
-        v = 0.99 * v + 0.01 * g ** 2
-        Y -= lr * (m / (1 - 0.9 ** t)) / (np.sqrt(v / (1 - 0.99 ** t)) + 1e-8)
+        v = 0.99 * v + 0.01 * g**2
+        Y -= lr * (m / (1 - 0.9**t)) / (np.sqrt(v / (1 - 0.99**t)) + 1e-8)
         if t % SNAPSHOT_EVERY == 0:
             snaps.append(Y.copy())
     return np.array(snaps)
@@ -137,8 +141,44 @@ def normalise(Y, centre, radius):
     """Centre a layout and scale its RMS radius (layouts come out at
     arbitrary scale) for display."""
     Y = Y - Y.mean(0)
-    Y = Y * radius / np.sqrt((Y ** 2).sum(1).mean())
+    Y = Y * radius / np.sqrt((Y**2).sum(1).mean())
     return np.c_[Y, np.zeros(len(Y))] + centre
+
+
+class RepairIntro(TIMCSlide):
+
+    def construct(self):
+        self.add_centered_text(
+            "UMAP managed to stretch bad nearest neighbours apart",
+            t2c={"bad nearest neighbours": COLOR_CYCLE[3]},
+        )
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text(
+            "UMAP managed to discern good hubs from bad hubs",
+            t2c={"good hubs": COLOR_CYCLE[2], "bad hubs": COLOR_CYCLE[3]},
+        )
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text("But how does it work?")
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text(
+            "Attraction and Repulsion forces work as message passing and aggregate evidence",
+            t2c={
+                "Attraction": COLOR_CYCLE[2],
+                "Repulsion": COLOR_CYCLE[3],
+                "message passing": HIGHLIGHT_COLOR,
+                "aggregate evidence": HIGHLIGHT_COLOR,
+            },
+        )
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text("But we need to get the forces right")
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text("Let's see it in action on a toy example")
+        self.marked_next_slide()
 
 
 # ---------------------------------------------------------------------------
@@ -150,11 +190,15 @@ class LongTailRepair(TIMCSlide):
     def graph_mobjects(self, positions_fn, kept, shortcuts, dot_radius=0.05):
         """Dots, true edges and shortcut edges that follow positions_fn()."""
         P = positions_fn()
-        dots = VGroup(*[Dot(P[i], radius=dot_radius,
-                            color=cyclic_color(self.theta[i] / TAU))
-                        for i in range(N)])
-        true_edges = VMobject(stroke_color=EDGE_COLOR, stroke_width=1.4,
-                              stroke_opacity=0.5)
+        dots = VGroup(
+            *[
+                Dot(P[i], radius=dot_radius, color=cyclic_color(self.theta[i] / TAU))
+                for i in range(N)
+            ]
+        )
+        true_edges = VMobject(
+            stroke_color=EDGE_COLOR, stroke_width=1.4, stroke_opacity=0.5
+        )
         short_edges = VMobject(stroke_color=SHORTCUT_COLOR, stroke_width=3)
 
         def segs(m, E):
@@ -186,80 +230,105 @@ class LongTailRepair(TIMCSlide):
         snaps = {k: layout(start, observed, k) for k in ("spring", "tail")}
 
         # ---- 1. the circle and its kNN graph ----
-        circle = np.c_[2.4 * np.cos(self.theta), 2.4 * np.sin(self.theta),
-                       np.zeros(N)] + 0.35 * DOWN
-        dots, true_e, _ = self.graph_mobjects(lambda: circle,
-                                              np.r_[kept, missing],
-                                              np.zeros((0, 2), int))
-        head = self.heading("A circle and its nearest-neighbour graph",
-                            f"each point joined to its {2 * HALF} nearest "
-                            "neighbours along the circle")
+        circle = (
+            np.c_[2.4 * np.cos(self.theta), 2.4 * np.sin(self.theta), np.zeros(N)]
+            + 0.35 * DOWN
+        )
+        dots, true_e, _ = self.graph_mobjects(
+            lambda: circle, np.r_[kept, missing], np.zeros((0, 2), int)
+        )
+        head = self.heading(
+            "A circle and its nearest-neighbour graph",
+            f"each point joined to its {2 * HALF} nearest "
+            "neighbours along the circle",
+        )
         self.play(FadeIn(head))
-        self.play(LaggedStart(*[FadeIn(d, scale=0.5) for d in dots],
-                              lag_ratio=0.01))
+        self.play(LaggedStart(*[FadeIn(d, scale=0.5) for d in dots], lag_ratio=0.01))
         self.play(Create(true_e), run_time=1.5)
         self.marked_next_slide()
 
         # ---- 2. rewiring: drop some edges, add random shortcuts ----
-        new = self.heading("Rewired edges",
-                           f"{N_MISSING} true edges dropped, {N_SHORTCUTS} "
-                           "random long-range shortcuts added")
-        kept_e = VMobject(stroke_color=EDGE_COLOR, stroke_width=1.4,
-                          stroke_opacity=0.5)
+        new = self.heading(
+            "Rewired edges",
+            f"{N_MISSING} true edges dropped, {N_SHORTCUTS} "
+            "random long-range shortcuts added",
+        )
+        kept_e = VMobject(stroke_color=EDGE_COLOR, stroke_width=1.4, stroke_opacity=0.5)
         A, B = circle[kept[:, 0]], circle[kept[:, 1]]
         pts = np.empty((4 * len(A), 3))
         pts[0::4], pts[3::4] = A, B
         pts[1::4], pts[2::4] = A + (B - A) / 3, A + 2 * (B - A) / 3
         kept_e.set_points(pts)
-        chords = VGroup(*[Line(circle[a], circle[b], color=SHORTCUT_COLOR,
-                               stroke_width=3) for a, b in shortcuts])
+        chords = VGroup(
+            *[
+                Line(circle[a], circle[b], color=SHORTCUT_COLOR, stroke_width=3)
+                for a, b in shortcuts
+            ]
+        )
         self.add(kept_e)
         self.play(FadeOut(true_e), FadeTransform(head, new))
-        self.play(LaggedStart(*[Create(c) for c in chords], lag_ratio=0.15),
-                  run_time=2)
+        self.play(LaggedStart(*[Create(c) for c in chords], lag_ratio=0.15), run_time=2)
         head = new
         self.marked_next_slide()
 
         # ---- 3. two attraction profiles ----
-        new = self.heading("Two kinds of attraction",
-                           "how hard an edge pulls its two ends together, "
-                           "by how far apart they are")
+        new = self.heading(
+            "Two kinds of attraction",
+            "how hard an edge pulls its two ends together, "
+            "by how far apart they are",
+        )
         self.play(FadeOut(dots, kept_e, chords), FadeTransform(head, new))
         head = new
-        axes = Axes(x_range=[0, 4, 1], y_range=[0, 3, 1], x_length=6.5,
-                    y_length=3.6, tips=False,
-                    axis_config=dict(color=DEFAULT_COLOR, stroke_width=2)
-                    ).move_to(0.5 * DOWN)
+        axes = Axes(
+            x_range=[0, 4, 1],
+            y_range=[0, 3, 1],
+            x_length=6.5,
+            y_length=3.6,
+            tips=False,
+            axis_config=dict(color=DEFAULT_COLOR, stroke_width=2),
+        ).move_to(0.5 * DOWN)
         x_lab = SmallText("distance", font_size=24, color=DEFAULT_COLOR).next_to(
-            axes.x_axis, DOWN, buff=0.25)
+            axes.x_axis, DOWN, buff=0.25
+        )
         y_lab = SmallText("pull", font_size=24, color=DEFAULT_COLOR).next_to(
-            axes.y_axis, LEFT, buff=0.25)
-        spring = axes.plot(lambda d: 2 * d, x_range=[0, 1.5],
-                           color=SPRING_COLOR, stroke_width=5)
-        tail = axes.plot(lambda d: 2 * d / (1 + d * d), x_range=[0, 4],
-                         color=TAIL_COLOR, stroke_width=5)
-        spring_lab = SmallText("spring: pulls harder the further apart",
-                               font_size=24, color=SPRING_COLOR).next_to(
-            axes.c2p(1.5, 3), RIGHT, buff=0.2)
-        tail_lab = SmallText("heavy tail: the pull fades with distance",
-                             font_size=24, color=TAIL_COLOR).next_to(
-            axes.c2p(2.6, 0.45), DOWN, buff=0.1)
+            axes.y_axis, LEFT, buff=0.25
+        )
+        spring = axes.plot(
+            lambda d: 2 * d, x_range=[0, 1.5], color=SPRING_COLOR, stroke_width=5
+        )
+        tail = axes.plot(
+            lambda d: 2 * d / (1 + d * d),
+            x_range=[0, 4],
+            color=TAIL_COLOR,
+            stroke_width=5,
+        )
+        spring_lab = SmallText(
+            "spring: pulls harder the further apart", font_size=24, color=SPRING_COLOR
+        ).next_to(axes.c2p(1.5, 3), RIGHT, buff=0.2)
+        tail_lab = SmallText(
+            "heavy tail: the pull fades with distance", font_size=24, color=TAIL_COLOR
+        ).next_to(axes.c2p(2.6, 0.45), DOWN, buff=0.1)
         self.play(Create(axes), FadeIn(x_lab, y_lab))
         self.play(Create(spring), FadeIn(spring_lab))
         self.play(Create(tail), FadeIn(tail_lab))
         self.marked_next_slide()
 
         # ---- 4. lay out the rewired graph both ways ----
-        new = self.heading("Lay out the rewired graph",
-                           "same graph, same spectral start; only the "
-                           "attraction differs")
-        self.play(FadeOut(axes, x_lab, y_lab, spring, tail, spring_lab,
-                          tail_lab), FadeTransform(head, new))
+        new = self.heading(
+            "Lay out the rewired graph",
+            "same graph, same spectral start; only the " "attraction differs",
+        )
+        self.play(
+            FadeOut(axes, x_lab, y_lab, spring, tail, spring_lab, tail_lab),
+            FadeTransform(head, new),
+        )
         head = new
         frame = ValueTracker(0.0)
         F = len(snaps["spring"])
-        centres = {"spring": np.array([-3.5, -0.3, 0]),
-                   "tail": np.array([3.5, -0.3, 0])}
+        centres = {
+            "spring": np.array([-3.5, -0.3, 0]),
+            "tail": np.array([3.5, -0.3, 0]),
+        }
 
         def positions(kind):
             def fn():
@@ -268,35 +337,50 @@ class LongTailRepair(TIMCSlide):
                 a = f - i
                 Y = (1 - a) * snaps[kind][i] + a * snaps[kind][i + 1]
                 return normalise(Y, centres[kind], 1.8)
+
             return fn
 
         panels = {}
-        for kind, name, col in (("spring", "Spring attraction", SPRING_COLOR),
-                                ("tail", "Heavy-tailed attraction",
-                                 TAIL_COLOR)):
-            d, e, s = self.graph_mobjects(positions(kind), kept, shortcuts,
-                                          dot_radius=0.045)
+        for kind, name, col in (
+            ("spring", "Spring attraction", SPRING_COLOR),
+            ("tail", "Heavy-tailed attraction", TAIL_COLOR),
+        ):
+            d, e, s = self.graph_mobjects(
+                positions(kind), kept, shortcuts, dot_radius=0.045
+            )
             title = SmallText(name, font_size=28, color=col).move_to(
-                centres[kind] + 2.5 * UP)
+                centres[kind] + 2.5 * UP
+            )
             panels[kind] = (VGroup(e, s, d), title)
             self.play(FadeIn(title), FadeIn(VGroup(e, s, d)), run_time=0.8)
         self.marked_next_slide()
 
-        self.play(frame.animate.set_value(F - 1), run_time=RUN_SECONDS,
-                  rate_func=smooth)
+        self.play(
+            frame.animate.set_value(F - 1), run_time=RUN_SECONDS, rate_func=smooth
+        )
         self.marked_next_slide()
 
         # ---- 5. the outcome ----
         notes = VGroup(
-            SmallText("the shortcuts pull hardest:\nthe circle is dragged out "
-                      "of shape", font_size=22, color=SPRING_COLOR,
-                      line_spacing=0.8).move_to(centres["spring"] + 3.05 * DOWN),
-            SmallText("the shortcuts give way, stretched long:\nthe circle "
-                      "recovers", font_size=22, color=TAIL_COLOR,
-                      line_spacing=0.8).move_to(centres["tail"] + 3.05 * DOWN))
-        new = self.heading("Repair needs long-tailed attraction",
-                           "a few bad edges are outvoted by the rest of the "
-                           "graph — if their pull fades with distance")
+            SmallText(
+                "the shortcuts pull hardest:\nthe circle is dragged out " "of shape",
+                font_size=22,
+                color=SPRING_COLOR,
+                line_spacing=0.8,
+            ).move_to(centres["spring"] + 3.05 * DOWN),
+            SmallText(
+                "the shortcuts give way, stretched long:\nthe circle " "recovers",
+                font_size=22,
+                color=TAIL_COLOR,
+                line_spacing=0.8,
+            ).move_to(centres["tail"] + 3.05 * DOWN),
+        )
+        new = self.heading(
+            "Repair needs long-tailed attraction",
+            "a few bad edges are outvoted by the rest of the "
+            "graph — if their pull fades with distance",
+        )
         self.play(FadeIn(notes), FadeTransform(head, new))
         self.marked_next_slide(auto_next=True)
-        self.clear_slide()
+        # self.clear_slide()
+        self.new_section("Deriving Forces")
