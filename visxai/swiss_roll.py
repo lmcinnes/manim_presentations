@@ -20,12 +20,16 @@ from config import (
     colormap_color,
     create_logo,
     make_heading,
+    install_round_points,
+    res_px,
+    PMFadeIn,
 )
 
 import numpy as np
 from sklearn.datasets import make_swiss_roll
 
 apply_defaults()
+install_round_points()
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +112,7 @@ class SwissRollUnroll(ThreeDTIMCSlide):
     # leaves room for the roll at the pinned end)
     HEIGHT_SCALE = 0.6  # sklearn's roll is as tall as it is wide, which
     # hides the spiral; a shorter roll reads better
-    POINT_SIZE = 2.5
+    POINT_SIZE = 3.4  # PMobject point size, pixels at 1440p
     CMAP = "plasma"  # colour by position along the roll
 
     # looking down on the roll shows the spiral; looking from the side
@@ -208,7 +212,7 @@ class SwissRollUnroll(ThreeDTIMCSlide):
         self.unroll = ValueTracker(0.0)
         self.place = ValueTracker(0.0)
 
-        cloud = PMobject(stroke_width=self.POINT_SIZE)
+        cloud = PMobject(stroke_width=res_px(self.POINT_SIZE))
         cloud.add_points(self.current_positions(), rgbas=self.rgbas)
         cloud.add_updater(lambda m: m.set(points=self.current_positions()))
 
@@ -217,7 +221,7 @@ class SwissRollUnroll(ThreeDTIMCSlide):
 
         self.set_camera_orientation(**self.ROLLED_CAMERA)
         self.play(FadeIn(title))
-        self.play(FadeIn(cloud), run_time=1.5)
+        self.play(PMFadeIn(cloud), run_time=1.5)
         self.add(cloud)
 
         # --- slide: one full turn around the rolled data (loops seamlessly)

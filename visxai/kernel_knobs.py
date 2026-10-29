@@ -41,6 +41,10 @@ from config import (
     cyclic_color,
     make_heading,
     SmallText,
+    install_round_points,
+    res_px,
+    PMFadeIn,
+    PMFadeOut,
 )
 
 import os
@@ -49,42 +53,7 @@ from pathlib import Path
 import numpy as np
 
 apply_defaults()
-
-# ---------------------------------------------------------------------------
-# Fades for point clouds: Cairo draws PMobject points without alpha
-# compositing, so blend their RGB towards the background instead.
-# ---------------------------------------------------------------------------
-class PMFadeOut(Animation):
-    """FadeOut for a PMobject: blend its points' RGB to the background;
-    removed from the scene at the end."""
-
-    def __init__(self, mob: PMobject, **kwargs):
-        from manim.utils.color import color_to_rgba
-        self._orig_rgbas = mob.rgbas.copy()
-        self._bg_rgb = np.array(color_to_rgba(config.background_color)[:3],
-                                dtype=np.float64)
-        super().__init__(mob, remover=True, **kwargs)
-
-    def interpolate_mobject(self, alpha: float) -> None:
-        self.mobject.rgbas[:, :3] = ((1.0 - alpha) * self._orig_rgbas[:, :3]
-                                     + alpha * self._bg_rgb)
-
-
-class PMFadeIn(Animation):
-    """FadeIn for a PMobject: blend its points' RGB from the background to
-    their colours. Add the mobject to the scene before playing."""
-
-    def __init__(self, mob: PMobject, **kwargs):
-        from manim.utils.color import color_to_rgba
-        self._target_rgbas = mob.rgbas.copy()
-        self._bg_rgb = np.array(color_to_rgba(config.background_color)[:3],
-                                dtype=np.float64)
-        mob.rgbas[:, :3] = self._bg_rgb
-        super().__init__(mob, **kwargs)
-
-    def interpolate_mobject(self, alpha: float) -> None:
-        self.mobject.rgbas[:, :3] = ((1.0 - alpha) * self._bg_rgb
-                                     + alpha * self._target_rgbas[:, :3])
+install_round_points()
 
 
 def split_point_clouds(group):
@@ -115,6 +84,7 @@ SWEEP_SECONDS = 3.0
 EVIDENCE_SECONDS = 5.0
 D_MAX, PULL_MAX = 4.0, 2.2
 CLASS_COLORS = COLOR_CYCLE[:10]
+MNIST_POINT_SIZE = 2.13            # PMobject point size, pixels at 1440p
 D_TRUE, D_SPURIOUS = 0.8, 3.4      # a true neighbour and a spurious long edge
 TAIL_SWEEP = (0.33, 4.0)           # alpha values: tail m*alpha ~ 0.5 ... 6
 PULL_ARROW_SCALE = 1.25            # pull-meter bar length per unit of pull
@@ -192,7 +162,7 @@ class KernelKnobs(TIMCSlide):
                 Y = Y * 1.3 / max(np.quantile(np.abs(Y), 0.99), 1e-9)
                 return np.c_[Y, np.zeros(len(Y))] + centre
 
-            pm = PMobject(stroke_width=1.6)
+            pm = PMobject(stroke_width=res_px(MNIST_POINT_SIZE))
             pm.add_points(pos(), rgbas=rgba)
             pm.add_updater(lambda m_, pos=pos: m_.set(points=pos()))
             cap = (f"m = {v:g}:  measured dim "
@@ -298,21 +268,21 @@ class KernelKnobs(TIMCSlide):
         explained = [
             (sigma_in, [], SIGMA_COLOR,
              "units: the typical distance to a nearest\n"
-             "neighbour -- it rescales the whole layout,\n"
+             "neighbour — it rescales the whole layout,\n"
              "and nothing else", [-4.2, -2.3, 0], RIGHT, DOWN, TAU / 4),
             (m_in, [], M_COLOR,
              "target intrinsic dimension: how\n"
-             "space-filling the layout should be --\n"
+             "space-filling the layout should be —\n"
              "1: compact clusters,  2: fills the plane",
              [4.3, 2.35, 0], DOWN, UP, TAU / 14),
             (alpha_in, [alpha_ex], ALPHA_COLOR,
-             "certainty about the local density --\n"
+             "certainty about the local density —\n"
              "large: density known, a spring;\n"
              "small: sceptical, long edges explained away",
              [-4.05, 2.35, 0], RIGHT, UP, -TAU / 4),
             (alpha_ex, [], TAIL_COLOR,
              "together, m and alpha set the tail:\n"
-             "a long edge pulls like  m alpha / d --\n"
+             "a long edge pulls like  m alpha / d —\n"
              "how hard a long, possibly spurious,\n"
              "edge can pull: the denoising dial",
              [4.3, -2.35, 0], UP, DOWN, -TAU / 14),
@@ -331,7 +301,7 @@ class KernelKnobs(TIMCSlide):
 
         k_line = SmallText("(counting k neighbours instead of one gives each "
                            "point personal space, at a cost in neighbour "
-                           "recall -- we keep k = 1)", font_size=18,
+                           "recall — we keep k = 1)", font_size=18,
                            color=ACCENT_COLOR).to_edge(DOWN, buff=0.3)
         self.play(FadeIn(k_line))
         self.marked_next_slide()
@@ -547,4 +517,5 @@ class KernelKnobs(TIMCSlide):
         self.add(panels)
         self.play(prog.animate.set_value(1.0), run_time=EVIDENCE_SECONDS,
                   rate_func=smooth)
-        self.marked_next_slide()
+        self.marked_next_slide(auto_next=True)
+        self.clear_slide()

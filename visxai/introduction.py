@@ -47,4 +47,4 @@ class Introduction(TIMCSlide):
         self.clear_slide()
         self.add_centered_text("How hard can it be?")
 
-        self.new_section("Visualization")
+        self.new_section("Visualization", auto_next=True)

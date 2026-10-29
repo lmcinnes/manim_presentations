@@ -111,7 +111,7 @@ class AttractionFamily(TIMCSlide):
         growth = VGroup(
             MathTex(r"\text{volume of the ball} \;=\; c\, d^{\,m}",
                     font_size=40),
-            Text("m: the dimension the neighbourhood fills -- its intrinsic "
+            Text("m: the dimension the neighbourhood fills — its intrinsic "
                  "dimension, not the screen's", font_size=20,
                  color=ACCENT_COLOR),
             Text("2 if points spread over the plane, 1 if they line up along "
@@ -139,7 +139,7 @@ class AttractionFamily(TIMCSlide):
         known = MathTex(r"q(d) \;=\; e^{-c\, d^{m} / v}",
                         font_size=56, color=REFERENCE_COLOR).move_to(0.1 * DOWN)
         note = Text("a long edge is very unlikely, so it pulls very hard:\n"
-                    "a spring -- the pull grows with distance",
+                    "a spring — the pull grows with distance",
                     font_size=24, color=REFERENCE_COLOR, line_spacing=0.8
                     ).next_to(known, DOWN, buff=0.5)
         self.play(Write(count_eq))
@@ -149,7 +149,7 @@ class AttractionFamily(TIMCSlide):
 
         # ---- 3. density uncertain: a heavy tail ----
         head = self.swap(head, "But the density is uncertain",
-                         "any estimate comes from the same noisy graph -- "
+                         "any estimate comes from the same noisy graph — "
                          "treating it as known makes long edges impossible",
                          FadeOut(count_eq, note),
                          known.animate.scale(0.7).move_to([-4.6, 0.9, 0]))
@@ -167,7 +167,7 @@ class AttractionFamily(TIMCSlide):
         sigma_note = Text("the radius of a ball holding one point's share of "
                           "space", font_size=20, color=ACCENT_COLOR
                           ).next_to(sigma, DOWN, buff=0.15)
-        note = Text("long edges stay possible, just unlikely: a heavy tail --\n"
+        note = Text("long edges stay possible, just unlikely: a heavy tail —\n"
                     "the pull fades with distance", font_size=24,
                     color=CURVE_COLOR, line_spacing=0.8).move_to([0, -2.6, 0])
         self.play(GrowArrow(arrow), FadeIn(prior, prior_note))

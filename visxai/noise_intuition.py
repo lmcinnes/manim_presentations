@@ -302,7 +302,9 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
         key_local = VGroup(
             Line(ORIGIN, RIGHT * 0.5, color=EDGE_COLOR, stroke_width=EDGE_WIDTH),
             SmallText(
-                "nearest neighbour, along the circle", font_size=14.4, color=ACCENT_COLOR
+                "nearest neighbour, along the circle",
+                font_size=14.4,
+                color=ACCENT_COLOR,
             ),
         ).arrange(RIGHT, buff=0.15)
         key_short = VGroup(
@@ -310,7 +312,9 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
                 ORIGIN, RIGHT * 0.5, color=SHORTCUT_COLOR, stroke_width=SHORTCUT_WIDTH
             ),
             SmallText(
-                "nearest neighbour, across the circle", font_size=14.4, color=ACCENT_COLOR
+                "nearest neighbour, across the circle",
+                font_size=14.4,
+                color=ACCENT_COLOR,
             ),
         ).arrange(RIGHT, buff=0.15)
         key = (
@@ -320,15 +324,12 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
             .align_to(hud, DOWN)
         )
 
-        caption = (
-            SmallText(
-                "in high dimensions the noise spreads over many "
-                "orthogonal directions; here it is packed into one",
-                font_size=14.4,
-                color=ACCENT_COLOR,
-            )
-            .next_to(sub, DOWN, buff=0.12)
-        )
+        caption = SmallText(
+            "in high dimensions the noise spreads over many "
+            "orthogonal directions; here it is packed into one",
+            font_size=14.4,
+            color=ACCENT_COLOR,
+        ).next_to(sub, DOWN, buff=0.12)
 
         # ---- slide 1: the circle ----
         self.add_fixed_in_frame_mobjects(title, sub)
@@ -388,3 +389,5 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
             added_anims=[self.view_zoom.animate.set_value(restore)],
         )
         self.marked_next_slide()
+
+        self.new_section("Hubs", auto_next=True)

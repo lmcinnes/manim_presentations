@@ -296,6 +296,7 @@ class LongTailRepair(TIMCSlide):
                       line_spacing=0.8).move_to(centres["tail"] + 3.05 * DOWN))
         new = self.heading("Repair needs long-tailed attraction",
                            "a few bad edges are outvoted by the rest of the "
-                           "graph -- if their pull fades with distance")
+                           "graph — if their pull fades with distance")
         self.play(FadeIn(notes), FadeTransform(head, new))
-        self.marked_next_slide()
+        self.marked_next_slide(auto_next=True)
+        self.clear_slide()

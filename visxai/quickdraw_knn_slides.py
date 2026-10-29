@@ -46,7 +46,7 @@ from knn_edge_slides import NearestNeighbourEdgeSlide
 class QuickDrawNearestNeighbourSlide(NearestNeighbourEdgeSlide):
     DATA_FILE = Path(os.environ.get("QUICKDRAW_KNN", _HERE / "quickdraw_knn.npz"))
     SHOWCASE_EDGES = [1924, 1571, 2284]
-    POINT_SIZE = 2.5  # fewer points than MNIST: draw them larger
+    POINT_SIZE = 3.4  # PMobject pixels at 1440p; fewer points than MNIST: larger
     EDGE_WIDTH = 0.6
     EDGE_OPACITY = 0.3
     LONG_EDGE_WIDTH = 1.2
@@ -73,3 +73,6 @@ class QuickDrawNearestNeighbourSlide(NearestNeighbourEdgeSlide):
             f"{self.caption(name_j)}: nearest neighbours",
             "closest doodle in DINOv2 space, from opposite ends of the map",
         )
+
+    def outro(self):
+        self.new_section("Noise in High Dimensions", auto_next=True)

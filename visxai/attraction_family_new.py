@@ -123,7 +123,7 @@ class AttractionFamily(TIMCSlide):
         question = VGroup(
             tex("t-SNE uses $1/(1+d^2)$", 28),
             tex("UMAP fits a curve to a setting", 28),
-            tex("each simply picks a curve --\ncan we derive one?", 28,
+            tex("each simply picks a curve —\ncan we derive one?", 28,
                 ACCENT_COLOR),
         ).arrange(DOWN, buff=0.45, aligned_edge=LEFT).move_to(LEFT_CENTRE)
         self.play(FadeIn(head))
@@ -204,7 +204,7 @@ class AttractionFamily(TIMCSlide):
                         font_size=52, color=KNOWN_COLOR).move_to(
             LEFT_CENTRE + 0.9 * UP)
         spring = tex("$-\\log q = \\lambda c\\, d^{\\,m}$ grows without "
-                     "limit:\na spring -- the pull grows with distance", 24,
+                     "limit:\na spring — the pull grows with distance", 24,
                      KNOWN_COLOR).next_to(known, DOWN, buff=0.4)
         scale_eq = MathTex(r"\lambda = \tfrac{1}{v}, \quad "
                            r"\sigma_0 = \sqrt[m]{v/c}"
@@ -229,8 +229,8 @@ class AttractionFamily(TIMCSlide):
 
         # ================= 5. the curve depends on density ================
         head = self.swap(head, "But the curve depends on the density",
-                         "the same distance: dense region -- someone is "
-                         "closer;  sparse region -- the disc is empty",
+                         "the same distance: dense region — someone is "
+                         "closer;  sparse region — the disc is empty",
                          FadeOut(known, spring, scale_eq, scale_note))
         panels = VGroup()
         for k, (rho, name, col, seed) in enumerate(
@@ -298,7 +298,7 @@ class AttractionFamily(TIMCSlide):
                          font_size=RESULT_SIZE, color=TAIL_COLOR).next_to(
             integral, DOWN, buff=0.4)
         tail_note = tex("their average: long edges stay possible, just "
-                        "unlikely --\na heavy tail; the pull fades with "
+                        "unlikely —\na heavy tail; the pull fades with "
                         "distance", 22, TAIL_COLOR).next_to(result, DOWN,
                                                             buff=0.3)
         c_tail = self.plot(lambda x: 1 / (1 + x ** 2), TAIL_COLOR, 5)
@@ -342,4 +342,5 @@ class AttractionFamily(TIMCSlide):
             row[2].align_to(1.9 * RIGHT, LEFT)
         for row in table:
             self.play(FadeIn(row, shift=0.1 * UP), run_time=0.7)
-        self.marked_next_slide()
+        self.marked_next_slide(auto_next=True)
+        self.clear_slide()

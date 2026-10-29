@@ -622,4 +622,4 @@ class WorldProjections(ThreeDTIMCSlide):
         )
         self.marked_next_slide()
 
-        self.new_section("Finding structure")
+        self.new_section("Finding structure", auto_next=True)

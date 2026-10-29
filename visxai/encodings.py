@@ -59,7 +59,7 @@ LABEL_SIZE = 21
 CITATION = "channels after Munzner, Visualization Analysis & Design (2014), ch. 5"
 FOOTNOTE = (
     "channels differ in how many levels they offer and how accurately "
-    "they are read -- position just shows these effects most clearly"
+    "they are read — position just shows these effects most clearly"
 )
 N_CLUSTER_POINTS = 26
 
@@ -265,7 +265,7 @@ class VisualEncodings(TIMCSlide):
         # ================= 1. the channels ===============================
         head = self.heading(
             "Encoding data visually",
-            "a mark -- here a point -- and the channels " "that can carry data",
+            "a mark — here a point — and the channels " "that can carry data",
         )
         mag = self.channel_rows(MAGNITUDE, MAG_X)
         ident = self.channel_rows(IDENTITY, ID_X)
@@ -430,4 +430,4 @@ class VisualEncodings(TIMCSlide):
         # self.play(FadeIn(foot))
         # self.marked_next_slide()
 
-        self.new_section("Making Compromises")
+        self.new_section("Making Compromises", auto_next=True)

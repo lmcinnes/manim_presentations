@@ -36,9 +36,13 @@ from config import (
     create_logo,
     make_heading,
     SmallText,
+    install_round_points,
+    res_px,
+    PMFadeIn,
 )
 
 apply_defaults()
+install_round_points()
 
 from pathlib import Path
 
@@ -115,7 +119,7 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
     DATA_FILE = None  # Path to the .npz from knn_edge_prep
     SHOWCASE_EDGES = None  # list of edge indices; None = prep's picks
 
-    POINT_SIZE = 1.5
+    POINT_SIZE = 2.0  # PMobject point size, pixels at 1440p
     EDGE_WIDTH = 0.4
     EDGE_OPACITY = 0.2
     LONG_EDGE_WIDTH = 0.8
@@ -180,7 +184,7 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
         rgba = np.array(
             [[*ManimColor(CLASS_COLORS[l]).to_rgb(), 1.0] for l in self.labels]
         )
-        pts = PMobject(stroke_width=self.POINT_SIZE)
+        pts = PMobject(stroke_width=res_px(self.POINT_SIZE))
         pts.add_points(self.P, rgbas=rgba)
         return pts
 
@@ -260,7 +264,7 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
 
         # ---- slide 1: the embedding ----
         self.play(FadeIn(head))
-        self.play(FadeIn(points), run_time=1.5)
+        self.play(PMFadeIn(points), run_time=1.5)
         self.play(FadeIn(badges))
         self.marked_next_slide()
 
@@ -352,4 +356,9 @@ class NearestNeighbourEdgeSlide(TIMCSlide):
                 FadeTransform(head, new),
                 run_time=1,
             )
-        self.marked_next_slide()
+        self.outro()
+
+    def outro(self):
+        """End of the scene: fade out, flowing straight into the next scene."""
+        self.marked_next_slide(auto_next=True)
+        self.clear_slide()

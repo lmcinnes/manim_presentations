@@ -14,8 +14,18 @@ python build.py --only KernelKnobs    # re-render one scene, then rebuild the pp
 python build.py --skip-existing       # render only scenes not yet in slides/
 python build.py --no-render           # just rebuild the pptx from slides/
 python build.py --shrink              # also write visxai-small.pptx (../shrink_pptx.py)
+python build.py --no-auto-next        # make every slide wait for a click
 python build.py --dry-run             # print the commands without running them
 ```
+
+Scenes flow into each other without an extra click: each scene ends with a
+closing slide (its fade-out, or a section title wiping away) made with
+`next_slide(auto_next=True)` -- `self.marked_next_slide(auto_next=True)`
+then `self.clear_slide()`, or `self.new_section(..., auto_next=True)`.
+manim-slides' pptx converter ignores `auto_next`, so after converting,
+`build.py` runs `../pptx_auto_next.py` to give those slides a timed advance
+(the length of their video). A click still advances early. When adding or
+reordering scenes, give each one that is followed by another such an ending.
 
 Data prep is off by default (the `.npz` files only need making once):
 

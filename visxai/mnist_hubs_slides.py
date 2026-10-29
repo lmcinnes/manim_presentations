@@ -38,6 +38,9 @@ from config import (
     create_logo,
     make_heading,
     SmallText,
+    install_round_points,
+    res_px,
+    PMFadeIn,
 )
 
 import os
@@ -46,6 +49,7 @@ from pathlib import Path
 import numpy as np
 
 apply_defaults()
+install_round_points()
 
 # ---------------------------------------------------------------------------
 # Settings
@@ -70,7 +74,7 @@ OTHER_DIGIT_COLOR = HIGHLIGHT_COLOR  # labels of pointers of another digit
 
 PLOT_CENTER = np.array([-3.65, -0.45, 0.0])
 PLOT_WIDTH, PLOT_HEIGHT = 6.4, 6.0
-POINT_SIZE = 1.2
+POINT_SIZE = 1.6  # PMobject point size, pixels at 1440p
 VEIL_OPACITY = 0.6  # dims the map while edges are shown
 
 N_SHOW = 10  # pointers shown as images per hub
@@ -144,7 +148,7 @@ class MNISTHubsSlide(TIMCSlide):
 
     def build_points(self):
         rgba = np.array([[*ManimColor(CLASS_COLORS[l]).to_rgb(), 1.0] for l in self.y])
-        pts = PMobject(stroke_width=POINT_SIZE)
+        pts = PMobject(stroke_width=res_px(POINT_SIZE))
         pts.add_points(self.P, rgbas=rgba)
         return pts
 
@@ -239,7 +243,7 @@ class MNISTHubsSlide(TIMCSlide):
             f"(sigma = {sigma:g}), coloured by digit",
         )
         self.play(FadeIn(head))
-        self.play(FadeIn(points), run_time=1.5)
+        self.play(PMFadeIn(points), run_time=1.5)
         self.play(FadeIn(badges))
         self.marked_next_slide()
 

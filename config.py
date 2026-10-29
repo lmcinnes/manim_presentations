@@ -1,6 +1,7 @@
 from manim import *
 from manim.utils.color.core import color_to_int_rgb
 from manim_slides import Slide, ThreeDSlide
+from functools import lru_cache
 import json
 import os
 import pickle
@@ -129,6 +130,151 @@ def cyclic_rgba(t):
         ]
     ).reshape(-1, 3)
     return np.hstack([rgb, np.ones((len(rgb), 1))])
+
+
+# ============================================================================
+# POINT CLOUDS (PMobject, Cairo renderer)
+# ============================================================================
+# Cairo's Camera.display_point_cloud draws each point as a block of
+# int(stroke_width) x int(stroke_width) pixels: a little square, at a size
+# fixed in pixels whatever the render resolution. Call install_round_points()
+# once per module (after apply_defaults()) to draw filled discs instead, and
+# size points with res_px() so they look the same at -ql and -qh.
+REF_PIXEL_HEIGHT = 1440  # resolution that res_px() sizes are tuned for
+
+
+def res_px(px_at_ref: float) -> float:
+    """Scale a pixel size tuned at REF_PIXEL_HEIGHT to the current resolution."""
+    return px_at_ref * config.pixel_height / REF_PIXEL_HEIGHT
+
+
+@lru_cache(maxsize=None)
+def _circular_nudges(thickness: int) -> np.ndarray:
+    c = (thickness - 1) / 2  # disc centre (on a half pixel for even sizes)
+    k = np.arange(thickness)
+    dy, dx = np.meshgrid(k, k, indexing="ij")
+    keep = (dy - c) ** 2 + (dx - c) ** 2 <= (thickness / 2) ** 2
+    return np.c_[dy[keep], dx[keep]] - (thickness - 1) // 2
+
+
+def make_circular_nudges(thickness: float) -> np.ndarray:
+    """Pixel-nudge offsets forming a filled disc (round PMobject points).
+
+    Always at least one pixel, so tiny (res_px-scaled) points never vanish.
+    """
+    # the epsilon stops e.g. res_px(...) == 4.9999999 truncating to 4
+    return _circular_nudges(max(int(thickness + 1e-6), 1))
+
+
+def _display_point_cloud_point_major(
+    self, pmobject, points, rgbas, thickness, pixel_array
+):
+    """Drop-in replacement for Camera.display_point_cloud.
+
+    Stock Cairo writes nudge-major (every point's first pixel, then every
+    point's second pixel, ...), so where discs overlap they interleave
+    pixel by pixel. Writing point-major gives true painter's order: later
+    points fully cover earlier ones.
+    """
+    if len(points) == 0:
+        return
+    pixel_coords = self.points_to_pixel_coords(pmobject, points)
+    nudges = self.get_thickening_nudges(thickness)
+    pixel_coords = (pixel_coords[:, None, :] + nudges[None, :, :]).reshape(-1, 2)
+
+    rgba_len = pixel_array.shape[2]
+    rgbas = (self.rgb_max_val * rgbas).astype(self.pixel_array_dtype)
+    rgbas = np.repeat(rgbas, len(nudges), axis=0)
+
+    on_screen = self.on_screen_pixels(pixel_coords)
+    pixel_coords = pixel_coords[on_screen]
+    rgbas = rgbas[on_screen]
+
+    ph, pw = self.pixel_height, self.pixel_width
+    indices = (pixel_coords[:, 0] + pw * pixel_coords[:, 1]).astype("int")
+    flat = pixel_array.reshape((ph * pw, rgba_len))
+    flat[indices] = rgbas
+    pixel_array[:, :] = flat.reshape((ph, pw, rgba_len))
+
+
+_ORIGINAL_THICKENING_NUDGES = Camera.get_thickening_nudges
+_ORIGINAL_DISPLAY_POINT_CLOUD = Camera.display_point_cloud
+
+
+def install_round_points(round_points=True, point_major=True):
+    """Patch the Cairo camera (2D and 3D) to draw PMobject points as discs,
+    layered in point order. Pass False to restore the stock behaviour."""
+    Camera.get_thickening_nudges = (
+        (lambda self, thickness: make_circular_nudges(thickness))
+        if round_points
+        else _ORIGINAL_THICKENING_NUDGES
+    )
+    Camera.display_point_cloud = (
+        _display_point_cloud_point_major
+        if point_major
+        else _ORIGINAL_DISPLAY_POINT_CLOUD
+    )
+
+
+# Cairo writes PMobject colours straight into the pixel array with no alpha
+# compositing, so FadeIn / FadeOut (which animate opacity) make clouds pop in
+# and out. These blend RGB towards / from the background instead, and leave
+# the cloud's updaters running so it can move while it fades.
+class PMRecolor(Animation):
+    """Blend a PMobject's point colours from their current values to
+    ``target_rgb`` (a colour, a (3,) array, or an (N, 3) array)."""
+
+    def __init__(self, mob: PMobject, target_rgb, **kwargs):
+        target = target_rgb
+        if not isinstance(target, np.ndarray):
+            target = np.asarray(color_to_rgb(target), dtype=np.float64)
+        self._target_rgb = np.broadcast_to(
+            np.asarray(target, dtype=np.float64), (len(mob.rgbas), 3)
+        ).copy()
+        kwargs.setdefault("suspend_mobject_updating", False)
+        super().__init__(mob, **kwargs)
+
+    def create_starting_mobject(self):
+        return Mobject()  # unused; avoids deep-copying large clouds
+
+    def begin(self):
+        self._start_rgb = self.mobject.rgbas[:, :3].copy()
+        self.mobject.rgbas[:, 3] = 1.0
+        super().begin()
+
+    def interpolate_mobject(self, alpha: float) -> None:
+        self.mobject.rgbas[:, :3] = (
+            1.0 - alpha
+        ) * self._start_rgb + alpha * self._target_rgb
+
+
+def _background_rgb():
+    return np.asarray(color_to_rgb(config.background_color), dtype=np.float64)
+
+
+class PMFadeOut(PMRecolor):
+    """FadeOut for a PMobject: blend it into the background, then remove it.
+    Its colours are restored afterwards, so it can be added again later."""
+
+    def __init__(self, mob: PMobject, **kwargs):
+        kwargs.setdefault("remover", True)
+        super().__init__(mob, _background_rgb(), **kwargs)
+
+    def clean_up_from_scene(self, scene):
+        super().clean_up_from_scene(scene)
+        self.mobject.rgbas[:, :3] = self._start_rgb
+
+
+class PMFadeIn(PMRecolor):
+    """FadeIn for a PMobject: blend it in from the background. It is added to
+    the scene when played, and set to the background colour straight away so
+    it cannot pop in before the animation starts."""
+
+    def __init__(self, mob: PMobject, **kwargs):
+        target = mob.rgbas[:, :3].copy()
+        mob.rgbas[:, :3] = _background_rgb()
+        kwargs.setdefault("introducer", True)
+        super().__init__(mob, target, **kwargs)
 
 
 # ============================================================================
@@ -370,6 +516,11 @@ def create_styled_axes(
 # ===========================================================================
 
 
+# How far past the frame edge a section title wipes away: stopping exactly at
+# the edge leaves an antialiased sliver of the title card on screen.
+SECTION_WIPE_OVERSHOOT = 0.2
+
+
 class _TIMCMixin:
     """
     Shared implementation for TIMCSlide (2D) and ThreeDTIMCSlide (3D).
@@ -410,6 +561,17 @@ class _TIMCMixin:
         self.add_centered_text(text, **kwargs)
         self.marked_next_slide()
         self.clear_slide(run_time=clear_run_time)
+
+    def _section_break(self, **kwargs):
+        """marked_next_slide(**kwargs), unless nothing has played since the
+        last break: that would make an empty slide (an extra click), so the
+        options are applied to the slide already started instead.
+        (Reads manim-slides' private slide-tracking state.)"""
+        if self._current_animation > self._start_animation:
+            self.marked_next_slide(**kwargs)
+        else:
+            for key, value in kwargs.items():
+                setattr(self._base_slide_config, key, value)
 
     # ------------------------------------------------------------------
     # Camera state
@@ -590,8 +752,16 @@ class _TIMCMixin:
         )
         return VGroup(background, section_title)
 
-    def new_section(self, section_name, next_slide_prep=None, pause_at_title=True):
-        self.marked_next_slide()
+    def new_section(
+        self, section_name, next_slide_prep=None, pause_at_title=True, auto_next=False
+    ):
+        """Wipe a section title down over the slide, then back up.
+
+        auto_next: advance to the next slide on its own once the title has
+        wiped away (at the end of a scene that flows into the next scene).
+        """
+        lead = {"auto_next": True} if auto_next and not pause_at_title else {}
+        self._section_break(**lead)
 
         section_slide = self._build_section_slide(section_name)
         section_slide.move_to(UP * config.frame_height)
@@ -603,7 +773,7 @@ class _TIMCMixin:
         self.wait(0.1)
 
         if pause_at_title:
-            self.next_slide()
+            self.next_slide(auto_next=auto_next)
         else:
             self.wait()
 
@@ -614,7 +784,9 @@ class _TIMCMixin:
             next_slide_prep()
 
         self.play(
-            section_slide.animate.shift(UP * config.frame_height),
+            section_slide.animate.shift(
+                UP * (config.frame_height + SECTION_WIPE_OVERSHOOT)
+            ),
             run_time=1,
         )
 
@@ -644,7 +816,9 @@ class _TIMCMixin:
             next_slide_prep()
 
         self.play(
-            section_slide.animate.shift(UP * config.frame_height),
+            section_slide.animate.shift(
+                UP * (config.frame_height + SECTION_WIPE_OVERSHOOT)
+            ),
             run_time=1,
         )
 
@@ -830,10 +1004,28 @@ class _TIMCMixin:
         )
 
     def clear_slide(self, animation=FadeOut, run_time=1):
-        self.play(
-            *[animation(mobject) for mobject in self.mobjects if mobject != self.logo],
-            run_time=run_time,
-        )
+        """Fade out everything but the logo. Point clouds (PMobjects), also
+        inside groups, get PMFadeOut, as FadeOut cannot fade them in Cairo."""
+        anims, emptied = [], []
+        for mobject in self.mobjects:
+            if mobject == self.logo:
+                continue
+            family = mobject.get_family()
+            if animation is not FadeOut or not any(
+                isinstance(m, PMobject) for m in family
+            ):
+                anims.append(animation(mobject))
+            elif isinstance(mobject, PMobject) and len(family) == 1:
+                anims.append(PMFadeOut(mobject))
+            else:
+                # fade the leaves one by one, then drop the emptied group
+                for leaf in (m for m in family if not m.submobjects):
+                    anims.append(
+                        PMFadeOut(leaf) if isinstance(leaf, PMobject) else FadeOut(leaf)
+                    )
+                emptied.append(mobject)
+        self.play(*anims, run_time=run_time)
+        self.remove(*emptied)
 
 
 # ===========================================================================
@@ -885,8 +1077,12 @@ class ThreeDTIMCSlide(_TIMCMixin, ThreeDSlide):
 
     # --- 3D-specific section wipes ---
 
-    def new_section(self, section_name, next_slide_prep=None, pause_at_title=True):
-        self.marked_next_slide()
+    def new_section(
+        self, section_name, next_slide_prep=None, pause_at_title=True, auto_next=False
+    ):
+        """See _TIMCMixin.new_section."""
+        lead = {"auto_next": True} if auto_next and not pause_at_title else {}
+        self._section_break(**lead)
 
         section_slide = self._build_section_slide(section_name)
         section_slide.move_to(UP * config.frame_height)
@@ -898,7 +1094,7 @@ class ThreeDTIMCSlide(_TIMCMixin, ThreeDSlide):
         )
 
         if pause_at_title:
-            self.next_slide()
+            self.next_slide(auto_next=auto_next)
         else:
             self.wait()
 
@@ -909,7 +1105,9 @@ class ThreeDTIMCSlide(_TIMCMixin, ThreeDSlide):
             next_slide_prep()
 
         self.play(
-            section_slide.animate.shift(UP * config.frame_height),
+            section_slide.animate.shift(
+                UP * (config.frame_height + SECTION_WIPE_OVERSHOOT)
+            ),
             run_time=1,
         )
 

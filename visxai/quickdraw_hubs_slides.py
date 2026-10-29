@@ -38,6 +38,9 @@ from config import (
     create_logo,
     make_heading,
     SmallText,
+    install_round_points,
+    res_px,
+    PMFadeIn,
 )
 
 import os
@@ -46,6 +49,7 @@ from pathlib import Path
 import numpy as np
 
 apply_defaults()
+install_round_points()
 
 # ---------------------------------------------------------------------------
 # Settings
@@ -68,7 +72,7 @@ OTHER_CLASS_COLOR = HIGHLIGHT_COLOR  # labels of pointers of another class
 
 PLOT_CENTER = np.array([-3.65, -0.45, 0.0])
 PLOT_WIDTH, PLOT_HEIGHT = 6.4, 6.0
-POINT_SIZE = 2.5  # fewer points than MNIST: draw them larger
+POINT_SIZE = 3.4  # PMobject pixels at 1440p; fewer points than MNIST: larger
 VEIL_OPACITY = 0.6  # dims the map while edges are shown
 BADGE_FONT_SIZE = 17.3
 
@@ -144,7 +148,7 @@ class QuickDrawHubsSlide(TIMCSlide):
 
     def build_points(self):
         rgba = np.array([[*ManimColor(CLASS_COLORS[l]).to_rgb(), 1.0] for l in self.y])
-        pts = PMobject(stroke_width=POINT_SIZE)
+        pts = PMobject(stroke_width=res_px(POINT_SIZE))
         pts.add_points(self.P, rgbas=rgba)
         return pts
 
@@ -246,7 +250,7 @@ class QuickDrawHubsSlide(TIMCSlide):
             "(no added noise), coloured by class",
         )
         self.play(FadeIn(head))
-        self.play(FadeIn(points), run_time=1.5)
+        self.play(PMFadeIn(points), run_time=1.5)
         self.play(FadeIn(badges))
         self.marked_next_slide()
 
@@ -326,3 +330,5 @@ class QuickDrawHubsSlide(TIMCSlide):
         )
         self.play(FadeTransform(head, new), FadeOut(veil))
         self.marked_next_slide()
+
+        self.new_section("Finding Solutions", auto_next=True)

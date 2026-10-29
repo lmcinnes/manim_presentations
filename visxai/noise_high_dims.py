@@ -123,7 +123,7 @@ class NoiseInHighDimensions(TIMCSlide):
         head = self.swap(
             head,
             "Distances between noisy points",
-            "every pair gets the same offset -- plus a " "fluctuation",
+            "every pair gets the same offset — plus a " "fluctuation",
             FadeOut(move, move_note),
         )
         expand = MathTex(
@@ -289,7 +289,7 @@ class NoiseInHighDimensions(TIMCSlide):
         ).next_to(rank, DOWN, buff=0.6)
         lead = self.note(
             "the noise has total size $\\sigma\\sqrt{D}$, spread "
-            "thinly over $D$ directions --\n"
+            "thinly over $D$ directions —\n"
             "next: pack all of it into one direction, and watch "
             "what it does to a neighbourhood graph",
             DEFAULT_COLOR,
@@ -299,3 +299,5 @@ class NoiseInHighDimensions(TIMCSlide):
         self.play(Write(window))
         self.play(FadeIn(lead))
         self.marked_next_slide()
+
+        self.new_section("Intuitions for Noise in High Dimensions", auto_next=True)

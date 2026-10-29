@@ -77,7 +77,7 @@ class HighDimensionsIntro(TIMCSlide):
         self.marked_next_slide()
         self.clear_slide()
         self.add_centered_text("Intuitions for high dimensions are much harder")
-        self.marked_next_slide()
+        self.marked_next_slide(auto_next=True)
         self.clear_slide()
 
 
@@ -269,7 +269,7 @@ class SphereShellVolume(ThreeDTIMCSlide):
             # )
         )
         self.wait()
-        self.marked_next_slide()
+        self.marked_next_slide(auto_next=True)
         self.clear_slide()
 
 
@@ -714,7 +714,7 @@ class BallInBoxVolume(ThreeDTIMCSlide):
         self.play(Write(explainer_text))
         self.play(Create(frame_box))
         self.wait()
-        self.marked_next_slide()
+        self.marked_next_slide(auto_next=True)
         self.clear_slide()
 
 
@@ -1083,4 +1083,4 @@ class EquatorBandArea(ThreeDTIMCSlide):
 
         self.clear_slide()
 
-        self.new_section("In Practice?")
+        self.new_section("In Practice?", auto_next=True)

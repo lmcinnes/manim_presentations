@@ -670,7 +670,7 @@ class Conclusion(TIMCSlide):
             self.marked_next_slide()
 
         bottom_text = SmallText(
-            "a corrupted kNN graph -- read as topology, not geometry --\n"
+            "a corrupted kNN graph — read as topology, not geometry —\n"
             "repaired by a layout that uses global information",
             font_size=TEXT_SIZE,
             color=DEFAULT_COLOR,
@@ -837,13 +837,13 @@ class Conclusion(TIMCSlide):
             (
                 icon_noise(),
                 "What is noise in your representation?",
-                "our model was isotropic Gaussian noise --\n"
+                "our model was isotropic Gaussian noise —\n"
                 "activations and embeddings almost certainly are not",
             ),
             (
                 icon_dial(),
                 "Can the knobs be set from the data?",
-                "a layout's measured dimension tracks the m you ask for --\n"
+                "a layout's measured dimension tracks the m you ask for —\n"
                 "but any estimate comes from the same corrupted graph",
             ),
             (

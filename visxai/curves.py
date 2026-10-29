@@ -39,9 +39,13 @@ from config import (
     cyclic_rgba,
     make_heading,
     SmallText,
+    install_round_points,
+    res_px,
+    PMFadeIn,
 )
 
 apply_defaults()
+install_round_points()
 
 import os
 from pathlib import Path
@@ -56,7 +60,7 @@ DATA_FILE = Path(os.environ.get("EMBED_FRAMES", _HERE / "embedding_frames.npz"))
 
 SWEEP_SECONDS = 20.0  # duration of the noise ramp
 LOOP_SECONDS = 12.0  # one full turn in the looping slides
-POINT_SIZE = 3  # PMobject stroke width (pixel size of each point)
+POINT_SIZE = 4  # PMobject point size, pixels at 1440p
 HUD_FONT = 34
 FOOT_FONT = 16.32
 NUMBER_COLOR = DEFAULT_COLOR  # HIGHLIGHT_COLOR is pale as text on white
@@ -225,7 +229,7 @@ class NoiseSweepSlideBase(ThreeDTIMCSlide):
 
     def make_cloud(self, E, offset):
         off = np.asarray(offset, dtype=float)
-        m = PMobject(stroke_width=POINT_SIZE)
+        m = PMobject(stroke_width=res_px(POINT_SIZE))
         m.add_points(E[0] + off, rgbas=self.rgba)
         m.add_updater(
             lambda mob: mob.set(
@@ -276,7 +280,7 @@ class NoiseSweepSlideBase(ThreeDTIMCSlide):
 
         self.play(*[FadeIn(m) for m in overlay], run_time=1)
         self.add(*clouds)
-        self.play(*[FadeIn(c) for c in clouds], run_time=1)
+        self.play(*[PMFadeIn(c) for c in clouds], run_time=1)
 
         self.marked_next_slide(loop=True)
         self.spin_loop()

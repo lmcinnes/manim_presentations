@@ -36,7 +36,8 @@ noise_intuition.py CircleNoiseIntuition
 
 # ---- hubs ----
 cube_hub.py CubeHubSlide
-mnist_hubs_slides.py MNISTHubsSlide
+# mnist_hubs_slides.py MNISTHubsSlide
+quickdraw_hubs_slides.py QuickDrawHubsSlide
 
 # ---- repairing with long-tailed attraction ----
 long_tail_repair.py LongTailRepair

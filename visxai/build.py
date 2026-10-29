@@ -8,10 +8,15 @@ manim-slides, convert to a PowerPoint deck, and (optionally) shrink it.
     python build.py --only KernelKnobs   # re-render one scene, then convert
     python build.py --quality l -j 8     # quick low-quality draft, 8 in parallel
     python build.py --shrink             # also write visxai-small.pptx
+    python build.py --no-auto-next       # every slide waits for a click
     python build.py --dry-run            # just print the commands
 
 The slide order lives in slide_sequence.txt; the prep steps and output names
 are in the config block below. Both are meant to be edited by hand.
+
+Slides made with next_slide(auto_next=True) -- e.g. a scene's closing fade,
+so it runs straight into the next scene -- are given a timed advance in the
+pptx (manim-slides' own pptx converter ignores auto_next).
 """
 
 import argparse
@@ -73,6 +78,7 @@ SEQUENCE_FILE = "slide_sequence.txt"
 SLIDES_DIR = "slides"  # where manim-slides render writes (fixed by manim-slides)
 OUTPUT_PPTX = "visxai.pptx"
 SHRINK_SCRIPT = "../shrink_pptx.py"
+AUTO_NEXT_SCRIPT = "../pptx_auto_next.py"
 LOG_DIR = "build_logs"
 JOB_MEDIA_DIR = "media/jobs"  # per-scene media dirs for parallel renders
 
@@ -250,6 +256,14 @@ def convert(args, entries):
         sys.exit("conversion failed")
 
 
+def auto_next(args, entries):
+    log("applying auto_next slide advances")
+    slides = [str(Path(SLIDES_DIR) / f"{s}.json") for _, s in entries]
+    cmd = RUN + ["python", AUTO_NEXT_SCRIPT, args.output, *slides]
+    if run(cmd, args.dry_run) != 0:
+        sys.exit("auto_next post-processing failed")
+
+
 def shrink(args):
     if not shutil.which("ffmpeg"):
         log("ffmpeg not found: skipping shrink")
@@ -320,6 +334,11 @@ def main():
         help=f"pptx to write (default: {OUTPUT_PPTX})",
     )
     g.add_argument(
+        "--no-auto-next",
+        action="store_true",
+        help="leave auto_next slides waiting for a click in the pptx",
+    )
+    g.add_argument(
         "--shrink",
         action="store_true",
         help=f"run {SHRINK_SCRIPT} on the pptx (writes <name>-small.pptx)",
@@ -346,6 +365,8 @@ def main():
         render(args, entries)
     if not args.no_convert:
         convert(args, entries)
+        if not args.no_auto_next:
+            auto_next(args, entries)
         if args.shrink:
             shrink(args)
     log("done")

@@ -48,6 +48,10 @@ from config import (
     make_heading,
     mixbox_interpolate_color,
     SmallText,
+    install_round_points,
+    res_px,
+    PMFadeIn,
+    PMFadeOut,
 )
 
 from pathlib import Path
@@ -58,6 +62,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from swiss_roll import SwissRollUnroll
 
 apply_defaults()
+install_round_points()
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +139,7 @@ class SwissRollStory(SwissRollUnroll):
         self.v_up = (self.height - self.height.min()) / np.ptp(self.height)
         rgb = sheet_colour(self.u_along, self.v_up)
         self.rgbas = np.c_[rgb, np.ones(len(rgb))]
-        cloud = PMobject(stroke_width=self.POINT_SIZE)
+        cloud = PMobject(stroke_width=res_px(self.POINT_SIZE))
         cloud.add_points(self.current_positions(), rgbas=self.rgbas)
         cloud.add_updater(lambda m: m.set(points=self.current_positions()))
         self.set_camera_orientation(**self.ROLLED_CAMERA)
@@ -312,8 +317,9 @@ class SwissRollStory(SwissRollUnroll):
         title.next_to(cells, UP, buff=0.16)
         return VGroup(cells, ticks, title).to_corner(DR, buff=0.45).shift(0.25 * UP)
 
-    def points_cloud(self, size=1.6):
-        cloud = PMobject(stroke_width=size)
+    def points_cloud(self, size=2.13):
+        """A cloud of the sample points; size is in pixels at 1440p."""
+        cloud = PMobject(stroke_width=res_px(size))
         cloud.add_points(self.current_positions(), rgbas=self.rgbas)
         cloud.add_updater(lambda m: m.set(points=self.current_positions()))
         return cloud
@@ -381,7 +387,7 @@ class SwissRollWhyUnroll(SwissRollStory):
     """The points come from a rolled-up sheet; unrolling the sheet is the
     natural flat picture."""
 
-    POINT_SIZE = 5.0
+    POINT_SIZE = 6.7  # pixels at 1440p
     SPIN_RATE = 1.0
 
     def construct(self):
@@ -403,7 +409,7 @@ class SwissRollWhyUnroll(SwissRollStory):
             "Classic Swiss-Roll data",
             "",
         )
-        self.play(FadeIn(cloud), run_time=1.5)
+        self.play(PMFadeIn(cloud), run_time=1.5)
         self.add(cloud)
         self.marked_next_slide()
         self.spin_once()
@@ -416,7 +422,7 @@ class SwissRollWhyUnroll(SwissRollStory):
             "There is an implicit structure",
             "",
             FadeIn(sheet),
-            FadeOut(cloud),
+            PMFadeOut(cloud),
             run_time=2,
         )
         self.marked_next_slide()
@@ -472,10 +478,8 @@ class SwissRollWhyUnroll(SwissRollStory):
             Create(up),
             FadeIn(lab_along, lab_up),
         )
-        self.marked_next_slide()
-
+        self.marked_next_slide(auto_next=True)
         self.clear_slide()
-        self.marked_next_slide()
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +501,7 @@ class SwissRollShortDistances(SwissRollStory):
             None,
             "Short distances",
             "a random sample of pairs of points close " "together on the roll",
-            FadeIn(cloud),
+            PMFadeIn(cloud),
             FadeIn(bar),
         )
         self.add(cloud)
@@ -540,7 +544,7 @@ class SwissRollLongDistances(SwissRollStory):
             None,
             "Long distances",
             "pairs of points far apart along the sheet, " "joined by straight lines",
-            FadeIn(cloud),
+            PMFadeIn(cloud),
             FadeIn(bar),
         )
         self.add(cloud)
@@ -562,7 +566,7 @@ class SwissRollLongDistances(SwissRollStory):
             head,
             "Long distances are given up",
             f"{big:.0f}% of these lines end up more than "
-            "twice as long -- that is what lets the "
+            "twice as long — that is what lets the "
             "sheet lie flat",
         )
         self.marked_next_slide()
@@ -574,7 +578,7 @@ class SwissRollDistanceContrast(SwissRollStory):
 
     N_SHORT = 900
     N_RANDOM, N_ENDS = 8, 4
-    POINT_SIZE = 5.0
+    POINT_SIZE = 6.7  # pixels at 1440p
 
     def construct(self):
 
@@ -588,9 +592,9 @@ class SwissRollDistanceContrast(SwissRollStory):
             "Classic Swiss-Roll data",
             "",
         )
-        cloud = self.points_cloud(size=3.2)
+        cloud = self.points_cloud(size=4.3)
         self.set_camera_orientation(theta=self.ROLLED_CAMERA["theta"] - TAU)
-        self.play(FadeIn(cloud), run_time=1.5)
+        self.play(PMFadeIn(cloud), run_time=1.5)
         self.add(cloud)
         self.marked_next_slide()
         short = self.short_pairs(self.N_SHORT)
@@ -656,4 +660,4 @@ class SwissRollDistanceContrast(SwissRollStory):
         self.spin_once()
         self.marked_next_slide()
 
-        self.new_section("High Dimensions")
+        self.new_section("High Dimensions", auto_next=True)

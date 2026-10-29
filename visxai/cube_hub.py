@@ -13,6 +13,7 @@ to count it among their k nearest:
 
     manim-slides render cube_hub.py CubeHubSlide
 """
+
 from manim import *
 
 import sys
@@ -36,73 +37,40 @@ from config import (
     create_logo,
     make_heading,
     mixbox_interpolate_color,
+    install_round_points,
+    res_px,
+    PMFadeIn,
 )
 
 import itertools
 
 import numpy as np
 
-try:  # if they have been hoisted into config.py
-    from config import PMFadeIn, PMFadeOut
-except ImportError:
-    # Same as in kernel_knobs.py. Cairo draws PMobject points without alpha
-    # compositing, so blend their RGB towards the background instead.
-    class PMFadeOut(Animation):
-        """FadeOut for a PMobject: blend its points' RGB to the background;
-        removed from the scene at the end."""
-
-        def __init__(self, mob: PMobject, **kwargs):
-            from manim.utils.color import color_to_rgba
-            self._orig_rgbas = mob.rgbas.copy()
-            self._bg_rgb = np.array(color_to_rgba(config.background_color)[:3],
-                                    dtype=np.float64)
-            super().__init__(mob, remover=True, **kwargs)
-
-        def interpolate_mobject(self, alpha: float) -> None:
-            self.mobject.rgbas[:, :3] = ((1.0 - alpha) * self._orig_rgbas[:, :3]
-                                         + alpha * self._bg_rgb)
-
-    class PMFadeIn(Animation):
-        """FadeIn for a PMobject: blend its points' RGB from the background
-        to their colours. Add the mobject to the scene before playing."""
-
-        def __init__(self, mob: PMobject, **kwargs):
-            from manim.utils.color import color_to_rgba
-            self._target_rgbas = mob.rgbas.copy()
-            self._bg_rgb = np.array(color_to_rgba(config.background_color)[:3],
-                                    dtype=np.float64)
-            mob.rgbas[:, :3] = self._bg_rgb
-            super().__init__(mob, **kwargs)
-
-        def interpolate_mobject(self, alpha: float) -> None:
-            self.mobject.rgbas[:, :3] = ((1.0 - alpha) * self._bg_rgb
-                                         + alpha * self._target_rgbas[:, :3])
-
 apply_defaults()
+install_round_points()
 
-HALF = 2.0                 # half the cube's side in scene units (data: 1)
-CLOUD_SIZE = 10            # points per corner
-K = 13                     # neighbours kept: > CLOUD_SIZE, so every point
-                           # has at least K - CLOUD_SIZE + 1 = 4 outside links
-CLOUD_SPREAD = 0.25        # sd per axis, data units (corners are 2 apart)
-SEED = 11                  # checked: the three waves below hold (see STAGES)
-POINT_SIZE = 7             # PMobject point size in pixels at 480p; scaled
-                           # with resolution so -ql and -qh look the same
+HALF = 2.0  # half the cube's side in scene units (data: 1)
+CLOUD_SIZE = 10  # points per corner
+K = 13  # neighbours kept: > CLOUD_SIZE, so every point
+# has at least K - CLOUD_SIZE + 1 = 4 outside links
+CLOUD_SPREAD = 0.25  # sd per axis, data units (corners are 2 apart)
+SEED = 11  # checked: the three waves below hold (see STAGES)
+POINT_SIZE = 21  # PMobject point size, pixels at 1440p (scaled by res_px)
 HUB_RADIUS = 0.085
 HUB_COLOR = HIGHLIGHT_COLOR
-EDGE_WIDTH = 1.0           # thin kNN edges
+EDGE_WIDTH = 1.0  # thin kNN edges
 HUB_EDGE_WIDTH = 2.2
-INSIDE_TINT = 0.35         # inside-cloud edges: cloud colour mixed this far
-                           # towards the background
-OUTSIDE_TINT = 0.6         # links between clouds: DEFAULT_COLOR mixed this
-                           # far towards the background
-SPIN_RATE = 0.12           # camera rotation, radians per second
+INSIDE_TINT = 0.35  # inside-cloud edges: cloud colour mixed this far
+# towards the background
+OUTSIDE_TINT = 0.6  # links between clouds: DEFAULT_COLOR mixed this
+# far towards the background
+SPIN_RATE = 0.12  # camera rotation, radians per second
 STAGES = (0.6, 0.15, 0.0)  # the point moves to s * its start; at these s the
-                           # new links come from adjacent clouds only, then
-                           # also face-diagonal ones, then all seven clouds
+# new links come from adjacent clouds only, then
+# also face-diagonal ones, then all seven clouds
 
 CORNERS = np.array(list(itertools.product((-1, 1), repeat=3)), float)
-HOME = int(np.flatnonzero((CORNERS == 1).all(1))[0])       # (1, 1, 1)
+HOME = int(np.flatnonzero((CORNERS == 1).all(1))[0])  # (1, 1, 1)
 STEPS = (CORNERS != CORNERS[HOME]).sum(1)  # 1 adjacent, 2 face, 3 opposite
 
 
@@ -113,8 +81,7 @@ def segments(P, pairs):
         return np.zeros((0, 3))
     idx = np.array(pairs)
     a, b = HALF * P[idx[:, 0]], HALF * P[idx[:, 1]]
-    return np.stack([a, a + (b - a) / 3, a + 2 * (b - a) / 3, b],
-                    axis=1).reshape(-1, 3)
+    return np.stack([a, a + (b - a) / 3, a + 2 * (b - a) / 3, b], axis=1).reshape(-1, 3)
 
 
 def cloud_colours(n):
@@ -147,12 +114,14 @@ class CubeHubSlide(ThreeDTIMCSlide):
         m = CLOUD_SIZE
         rng = np.random.default_rng(SEED)
         self.P0 = np.repeat(CORNERS, m, 0) + rng.normal(
-            scale=CLOUD_SPREAD, size=(8 * m, 3))
+            scale=CLOUD_SPREAD, size=(8 * m, 3)
+        )
         self.cloud = np.repeat(np.arange(8), m)
         # the point that moves: an ordinary member, nearest its cloud's mean
         own = np.flatnonzero(self.cloud == HOME)
-        self.hub = int(own[np.argmin(np.linalg.norm(
-            self.P0[own] - self.P0[own].mean(0), axis=1))])
+        self.hub = int(
+            own[np.argmin(np.linalg.norm(self.P0[own] - self.P0[own].mean(0), axis=1))]
+        )
         self.s = ValueTracker(1.0)
 
     def positions(self, s=None):
@@ -171,15 +140,20 @@ class CubeHubSlide(ThreeDTIMCSlide):
         moving point's own choices are left out: the slide is about who
         chooses it."""
         nn = self.knn(s)
-        return {tuple(sorted((i, int(j))))
-                for i in range(len(nn)) if i != self.hub for j in nn[i]}
+        return {
+            tuple(sorted((i, int(j))))
+            for i in range(len(nn))
+            if i != self.hub
+            for j in nn[i]
+        }
 
     def choosers(self, s):
         """Points in other clouds that keep the moving point among their K
         nearest."""
         nn = self.knn(s)
-        return [i for i in range(len(nn))
-                if self.cloud[i] != HOME and self.hub in nn[i]]
+        return [
+            i for i in range(len(nn)) if self.cloud[i] != HOME and self.hub in nn[i]
+        ]
 
     # ---- edge layers: one VMobject per style ----
     def kind(self, e):
@@ -193,25 +167,33 @@ class CubeHubSlide(ThreeDTIMCSlide):
 
     def style(self, kind):
         if kind == "hub":
-            return dict(stroke_color=HUB_COLOR, stroke_width=HUB_EDGE_WIDTH,
-                        stroke_opacity=1.0)
+            return dict(
+                stroke_color=HUB_COLOR, stroke_width=HUB_EDGE_WIDTH, stroke_opacity=1.0
+            )
         if kind == "out":
-            return dict(stroke_color=mixbox_interpolate_color(
-                DEFAULT_COLOR, BACKGROUND_COLOR, OUTSIDE_TINT),
-                stroke_width=EDGE_WIDTH, stroke_opacity=1.0)
+            return dict(
+                stroke_color=mixbox_interpolate_color(
+                    DEFAULT_COLOR, BACKGROUND_COLOR, OUTSIDE_TINT
+                ),
+                stroke_width=EDGE_WIDTH,
+                stroke_opacity=1.0,
+            )
         c = HOME if kind == "hub_home" else kind
-        return dict(stroke_color=mixbox_interpolate_color(
-            self.colours[c], BACKGROUND_COLOR, INSIDE_TINT),
-            stroke_width=EDGE_WIDTH, stroke_opacity=1.0)
+        return dict(
+            stroke_color=mixbox_interpolate_color(
+                self.colours[c], BACKGROUND_COLOR, INSIDE_TINT
+            ),
+            stroke_width=EDGE_WIDTH,
+            stroke_opacity=1.0,
+        )
 
     def layer(self, kind, pairs):
         mob = VMobject(fill_opacity=0, **self.style(kind))
         mob.pairs = sorted(pairs)
         mob.set_points(segments(self.positions(), mob.pairs))
         mob.set_z_index(0)
-        if kind in ("hub", "hub_home"):    # these follow the moving point
-            mob.add_updater(lambda l: l.set_points(
-                segments(self.positions(), l.pairs)))
+        if kind in ("hub", "hub_home"):  # these follow the moving point
+            mob.add_updater(lambda l: l.set_points(segments(self.positions(), l.pairs)))
         return mob
 
     def rewire(self, new_edges):
@@ -222,14 +204,15 @@ class CubeHubSlide(ThreeDTIMCSlide):
             lay = self.layers[kind]
             lay.pairs = [e for e in lay.pairs if e not in gone]
             lay.set_points(segments(self.positions(), lay.pairs))
-            fades.append(self.layer(kind, [e for e in gone
-                                           if self.kind(e) == kind]))
+            fades.append(self.layer(kind, [e for e in gone if self.kind(e) == kind]))
         for kind in {self.kind(e) for e in born}:
-            grows.append(self.layer(kind, [e for e in born
-                                           if self.kind(e) == kind]))
+            grows.append(self.layer(kind, [e for e in born if self.kind(e) == kind]))
         self.add(*fades)
-        self.play(*[f.animate.set_stroke(opacity=0) for f in fades],
-                  *[Create(g) for g in grows], run_time=2)
+        self.play(
+            *[f.animate.set_stroke(opacity=0) for f in fades],
+            *[Create(g) for g in grows],
+            run_time=2,
+        )
         self.remove(*fades, *grows)
         for e in born:
             kind = self.kind(e)
@@ -251,25 +234,38 @@ class CubeHubSlide(ThreeDTIMCSlide):
 
         def reached(c, step):
             return {int(cloud[i]) for i in c if STEPS[cloud[i]] == step}
-        pattern = [tuple(len(reached(c, t)) for t in (1, 2, 3))
-                   for c in caught]
-        if not (pattern[0] == (3, 0, 0) and pattern[1][1] >= 2
-                and pattern[1][2] == 0 and pattern[2] == (3, 3, 1)):
-            raise ValueError(f"clouds reached per stage {pattern}: the waves "
-                             "do not hold for these settings; try another "
-                             "SEED or STAGES")
 
-        self.set_camera_orientation(phi=65 * DEGREES, theta=-50 * DEGREES,
-                                    zoom=0.78)
+        pattern = [tuple(len(reached(c, t)) for t in (1, 2, 3)) for c in caught]
+        if not (
+            pattern[0] == (3, 0, 0)
+            and pattern[1][1] >= 2
+            and pattern[1][2] == 0
+            and pattern[2] == (3, 3, 1)
+        ):
+            raise ValueError(
+                f"clouds reached per stage {pattern}: the waves "
+                "do not hold for these settings; try another "
+                "SEED or STAGES"
+            )
+
+        self.set_camera_orientation(phi=65 * DEGREES, theta=-50 * DEGREES, zoom=0.78)
         self.begin_ambient_camera_rotation(rate=SPIN_RATE)
 
         # ---- mobjects ----
-        cube = VGroup(*[
-            Line(HALF * CORNERS[a], HALF * CORNERS[b], color=DEFAULT_COLOR,
-                 stroke_width=1.5, stroke_opacity=0.15)
-            for a, b in itertools.combinations(range(8), 2)
-            if np.isclose(np.linalg.norm(CORNERS[a] - CORNERS[b]), 2)])
-        px = POINT_SIZE * config.pixel_height / 480
+        cube = VGroup(
+            *[
+                Line(
+                    HALF * CORNERS[a],
+                    HALF * CORNERS[b],
+                    color=DEFAULT_COLOR,
+                    stroke_width=1.5,
+                    stroke_opacity=0.15,
+                )
+                for a, b in itertools.combinations(range(8), 2)
+                if np.isclose(np.linalg.norm(CORNERS[a] - CORNERS[b]), 2)
+            ]
+        )
+        px = res_px(POINT_SIZE)
         clouds = []
         for c in range(8):
             idx = [i for i in np.flatnonzero(cloud == c) if i != hub]
@@ -280,9 +276,11 @@ class CubeHubSlide(ThreeDTIMCSlide):
         mover = Dot(HALF * self.P0[hub], radius=HUB_RADIUS, color=HUB_COLOR)
         mover.add_updater(lambda d: d.move_to(HALF * self.positions()[hub]))
         mover.set_z_index(2)
-        ghost = Dot(HALF * self.P0[hub], radius=HUB_RADIUS,
-                    color=mixbox_interpolate_color(HUB_COLOR, BACKGROUND_COLOR,
-                                                   0.7)).set_z_index(1)
+        ghost = Dot(
+            HALF * self.P0[hub],
+            radius=HUB_RADIUS,
+            color=mixbox_interpolate_color(HUB_COLOR, BACKGROUND_COLOR, 0.7),
+        ).set_z_index(1)
         self.add_fixed_orientation_mobjects(mover, ghost)
         self.remove(ghost)
 
@@ -293,28 +291,34 @@ class CubeHubSlide(ThreeDTIMCSlide):
         self.layers = {k: self.layer(k, v) for k, v in by_kind.items()}
         inside = [self.layers[k] for k in self.layers if k != "out"]
 
-        directed = [(i, j) for i, nn in enumerate(self.knn(1.0)) if i != hub
-                    for j in nn]
+        directed = [
+            (i, j) for i, nn in enumerate(self.knn(1.0)) if i != hub for j in nn
+        ]
         share = np.mean([cloud[i] == cloud[j] for i, j in directed])
 
         # ---- slide 1: the clouds, and links inside them ----
-        head = self.heading("A diffuse cloud of points at each corner",
-                            f"each point is linked to its {K} nearest "
-                            "neighbours")
+        head = self.heading(
+            "A diffuse cloud of points at each corner",
+            f"each point is linked to its {K} nearest " "neighbours",
+        )
         self.add_fixed_in_frame_mobjects(head)
         self.play(FadeIn(head), Create(cube))
         self.add(*clouds)
-        self.play(LaggedStart(*[PMFadeIn(pm) for pm in clouds],
-                              lag_ratio=0.15), FadeIn(mover, scale=0.5),
-                  run_time=2)
+        self.play(
+            LaggedStart(*[PMFadeIn(pm) for pm in clouds], lag_ratio=0.15),
+            FadeIn(mover, scale=0.5),
+            run_time=2,
+        )
         self.play(*[Create(l) for l in inside], run_time=2)
         self.marked_next_slide()
 
         # ---- slide 2: ... and the links that reach outside ----
         head = self.swap_heading(
-            head, f"Most links stay inside a cloud ({share:.0%})",
+            head,
+            f"Most links stay inside a cloud ({share:.0%})",
             f"but with {CLOUD_SIZE} points to a cloud and {K} neighbours, "
-            "every point also reaches into the next clouds")
+            "every point also reaches into the next clouds",
+        )
         self.play(Create(self.layers["out"]), run_time=2)
         self.marked_next_slide()
 
@@ -329,19 +333,24 @@ class CubeHubSlide(ThreeDTIMCSlide):
         ]
         for s, c, cap in zip(STAGES, caught, captions):
             head = self.swap_heading(
-                head, "Nudge one point towards the centre",
-                cap.format(n=len(c), c=len({int(cloud[i]) for i in c})))
+                head,
+                "Nudge one point towards the centre",
+                cap.format(n=len(c), c=len({int(cloud[i]) for i in c})),
+            )
             if s == STAGES[0]:
                 self.add(ghost)
-            self.play(self.s.animate.set_value(s), run_time=2.5,
-                      rate_func=smooth)
+            self.play(self.s.animate.set_value(s), run_time=2.5, rate_func=smooth)
             self.rewire(self.edges(s))
             self.marked_next_slide()
 
         # ---- what changes in high dimensions ----
         head = self.swap_heading(
-            head, "In n dimensions",
+            head,
+            "In n dimensions",
             "each corner has n adjacent corners: even a tiny nudge makes the "
-            "point a near neighbour of all n at once")
+            "point a near neighbour of all n at once",
+        )
         self.wait(4)
         self.marked_next_slide()
+
+        self.new_section("Hubs in Practice?", auto_next=True)
