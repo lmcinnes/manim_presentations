@@ -2640,8 +2640,8 @@ class HardLissajousKnotPersistenceDiagram(TIMCSlide):  # type: Scene
         h1_nonnoise_features = [
             dot
             for dot in new_h_groups[1]
-            if dot.get_center()[1] > new_axes.c2p(0.5, 0.8)[1]
-            and dot.get_center()[0] < new_axes.c2p(0.75, 0.5)[0]
+            if dot.get_center()[1] > new_axes.c2p(0.5, 0.9)[1]
+            and dot.get_center()[0] < new_axes.c2p(0.6, 0.5)[0]
         ]
         for h1_nonnoise_feature in h1_nonnoise_features:
             self.play(

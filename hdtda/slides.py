@@ -259,6 +259,54 @@ class LEtoFDExplanation(TIMCSlide):
         self.play(Write(constraint))
         self.marked_next_slide()
 
+        centering_label = Text("Centering", font_size=32, color=COLOR_CYCLE[2]).next_to(
+            constraint[2], UR, buff=1.0
+        )
+        centering_arrow = CurvedArrow(
+            centering_label.get_edge_center(LEFT) + LEFT * 0.1,
+            constraint[2].get_center() + UP * 0.1,
+            angle=PI / 4,
+            color=COLOR_CYCLE[2],
+            stroke_width=4,
+            tip_length=0.2,
+        )
+
+        self.play(
+            Write(centering_label),
+            Create(centering_arrow),
+            constraint[2].animate.set_color(COLOR_CYCLE[2]),
+        )
+        self.wait()
+        self.marked_next_slide()
+
+        self.play(
+            FadeOut(centering_label),
+            FadeOut(centering_arrow),
+            constraint[2].animate.set_color(DEFAULT_COLOR),
+        )
+        self.wait()
+
+        self.play(
+            Circumscribe(
+                constraint[0],
+                color=COLOR_CYCLE[1],
+                stroke_width=6,
+                run_time=2,
+            ),
+            constraint[0].animate.set_color(COLOR_CYCLE[1]),
+        )
+        self.play(
+            Circumscribe(
+                constraint[0],
+                color=COLOR_CYCLE[1],
+                stroke_width=6,
+                run_time=2,
+            ),
+            constraint[0].animate.set_color(DEFAULT_COLOR),
+        )
+        self.wait()
+        self.marked_next_slide()
+
         new_loss = MathTex(
             r"\mathcal{L} = \frac{1}{2} \sum_{i,j} W_{ij} \|y_i - y_j\|^2",
             font_size=56,
@@ -684,6 +732,109 @@ class GeneralizedBetaPrimeDistribution(TIMCSlide):
         self.wait()
         self.marked_next_slide()
 
+        # # One colour per parameter, used both in the formula and its label
+        # C_ALPHA = COLOR_CYCLE[0]  # blue
+        # C_BETA = COLOR_CYCLE[3]  # pink/red
+        # C_P = COLOR_CYCLE[2]  # green
+        # C_Q = COLOR_CYCLE[1]  # orange
+
+        # title = Text("Probability Density Function", font_size=48).to_edge(UP, buff=1.0)
+
+        # # Pass as a single, valid LaTeX string.
+        # # Modern Manim will compile this cleanly all at once.
+        # formula = MathTex(
+        #     r"\psi(x;\ \alpha,\ \beta,\ p,\ q) = \frac{1}{Z} \cdot \frac{x^{\alpha - 1}}{(1 + (x / p)^q)^\beta}",
+        #     substrings_to_isolate=[r"\alpha", r"\beta", r"p", r"q"],
+        #     font_size=56,
+        # )
+
+        # # Color every instance of the parameters across the entire formula
+        # formula.set_color_by_tex(r"\alpha", C_ALPHA)
+        # formula.set_color_by_tex(r"\beta", C_BETA)
+        # formula.set_color_by_tex(r"p", C_P)
+        # formula.set_color_by_tex(r"q", C_Q)
+
+        # self.play(Write(title))
+        # self.play(Write(formula))
+        # self.wait()
+        # self.marked_next_slide()
+
+        # # Annotation labels, one per corner for maximum breathing room
+        # alpha_label = (
+        #     Text("Controls left tail", font_size=26, color=C_ALPHA, stroke_color=C_ALPHA)
+        #     .to_corner(UL, buff=2.0)
+        #     .shift(RIGHT * 2)
+        # )
+        # q_label = (
+        #     Text("Shape parameter", font_size=26, color=C_Q, stroke_color=C_Q)
+        #     .to_corner(UR, buff=1.75)
+        #     .shift(RIGHT)
+        # )
+        # p_label = (
+        #     Text("Scale parameter", font_size=26, color=C_P, stroke_color=C_P)
+        #     .to_corner(DL, buff=2.0)
+        #     .shift(RIGHT * 1.5)
+        # )
+        # beta_label = (
+        #     Text("Controls right tail", font_size=26, color=C_BETA, stroke_color=C_BETA)
+        #     .to_corner(DR, buff=0.5)
+        #     .shift(UP * 0.5)
+        # )
+
+        # # Extract the specific sub-mobjects in the equation body (the 2nd occurrence -> index 1)
+        # target_alpha = formula.get_parts_by_tex(r"\alpha")[1]
+        # target_beta  = formula.get_parts_by_tex(r"\beta")[1]
+        # target_p     = formula.get_parts_by_tex(r"p")[1]
+        # target_q     = formula.get_parts_by_tex(r"q")[1]
+
+        # # Curved arrows mapping cleanly to the retrieved sub-mobjects
+        # alpha_arrow = CurvedArrow(
+        #     alpha_label.get_edge_center(RIGHT) + RIGHT * 0.125,
+        #     target_alpha.get_center() + UL * 0.25,
+        #     angle=-PI / 5,
+        #     color=C_ALPHA,
+        #     stroke_width=4,
+        #     tip_length=0.2,
+        # )
+        # q_arrow = CurvedArrow(
+        #     q_label.get_center() + DOWN * 0.2,
+        #     target_q.get_center() + UP * 0.25,
+        #     angle=PI / 5,
+        #     color=C_Q,
+        #     stroke_width=4,
+        #     tip_length=0.2,
+        # )
+        # p_arrow = CurvedArrow(
+        #     p_label.get_edge_center(RIGHT) + RIGHT * 0.125,
+        #     target_p.get_bottom() + DL * 0.1,
+        #     angle=PI / 5,
+        #     color=C_P,
+        #     stroke_width=4,
+        #     tip_length=0.2,
+        # )
+        # beta_arrow = CurvedArrow(
+        #     beta_label.get_center() + UL * 0.2,
+        #     target_beta.get_bottom(),
+        #     angle=PI / 5,
+        #     color=C_BETA,
+        #     stroke_width=4,
+        #     tip_length=0.2,
+        # )
+
+        # self.play(
+        #     Write(alpha_label),
+        #     Create(alpha_arrow),
+        #     Write(q_label),
+        #     Create(q_arrow),
+        #     Write(p_label),
+        #     Create(p_arrow),
+        #     Write(beta_label),
+        #     Create(beta_arrow),
+        # )
+
+        # self.wait()
+        # self.marked_next_slide()
+
         # Place the new labels at their final positions up front so that
         # ReplacementTransform morphs the text AND moves to the target in one step.
         alpha_label_new = Text(
@@ -1051,3 +1202,44 @@ class Summary(TIMCSlide):
             font="Marcellus SC",
         )
         self.wait()
+
+
+class PersistenceStability(TIMCSlide):
+    def construct(self):
+
+        # Show the stability theorem relating bottleneck distance to Gromov-Hausdorff distance
+        stability_formula = MathTex(
+            r"d_B(Dgm(X), Dgm(Y))",
+            r" \leq ",
+            r"2 d_{GH}(X, Y)",
+            font_size=56,
+        ).move_to(ORIGIN)
+        self.play(Write(stability_formula))
+        self.wait()
+        self.marked_next_slide()
+
+        phantom_formula = MathTex(
+            r"d_B(Dgm(X), Dgm(Y)) \leq 2 d_{GH}(X, Y)",
+            r"\approx \sigma\sqrt{\frac{d}{2}}",
+            font_size=56,
+        ).move_to(ORIGIN)
+
+        asymptotic_bound = (
+            MathTex(
+                r"\approx \sigma\sqrt{\frac{d}{2}}",
+                font_size=56,
+            )
+            .move_to(phantom_formula[1].get_center())
+            .set_y(ORIGIN[1] + 0.1)
+        )
+        noise_model = Tex(
+            "Isotropic Gaussian noise model in $d$ dimensions with variance $\sigma^2$",
+            font_size=40,
+            color=ACCENT_COLOR,
+            stroke_color=ACCENT_COLOR,
+        ).to_edge(DOWN, buff=0.5)
+        self.play(stability_formula.animate.set_x(phantom_formula[0].get_center()[0]))
+        self.play(Write(asymptotic_bound), FadeIn(noise_model, shift=UP))
+
+        self.wait()
+        self.marked_next_slide()
