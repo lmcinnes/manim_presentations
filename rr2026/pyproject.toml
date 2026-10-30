@@ -1,0 +1,18 @@
+[project]
+name = "rr2026"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "datashader>=0.19.1",
+    "manim>=0.21.0",
+    "manim-slides>=5.7.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+    "pynndescent>=0.6.0",
+    "umap-learn",
+]
+
+[tool.uv.sources]
+umap-learn = { path = "../../umap", editable = true }

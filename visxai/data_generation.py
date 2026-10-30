@@ -1,0 +1,1032 @@
+import numpy as np
+from sklearn.decomposition import PCA
+from scipy.spatial.distance import pdist, squareform
+import matplotlib.pyplot as plt
+import pynndescent
+
+import scipy.sparse
+
+# Assuming ripser and persim are available in your environment
+# from ripser import ripser
+# from persim import plot_diagrams
+
+
+class CircleEmbedding:
+    """
+    Generate noisy circles in 2D and embed them into high-dimensional spaces.
+
+    This class provides methods for:
+    - Linear embeddings (random projection)
+    - Nonlinear embeddings (polynomial features)
+    - Controlled noise in both low and high dimensions
+    """
+
+    def __init__(self, n_samples=200, seed=42):
+        """
+        Parameters
+        ----------
+        n_samples : int
+            Number of points to sample from the circle
+        seed : int
+            Random seed for reproducibility
+        """
+        self.n_samples = n_samples
+        self.seed = seed
+        self.rng = np.random.RandomState(seed)
+
+    def generate_circle_2d(self, radius=1.0, noise_2d=0.05):
+        """
+        Generate a noisy circle in 2D.
+
+        Parameters
+        ----------
+        radius : float
+            Radius of the circle
+        noise_2d : float
+            Standard deviation of Gaussian noise added to circle points
+
+        Returns
+        -------
+        X : ndarray of shape (n_samples, 2)
+            Points sampled from noisy circle
+        """
+        # Sample angles uniformly
+        theta = self.rng.uniform(0, 2 * np.pi, self.n_samples)
+
+        # Generate circle points
+        X = np.column_stack([radius * np.cos(theta), radius * np.sin(theta)])
+
+        # Add noise in 2D
+        if noise_2d > 0:
+            X += self.rng.normal(0, noise_2d, X.shape)
+
+        return X
+
+    def get_orthonormal_basis(self, out_d=50, in_d=2, seed=0):
+        """
+        Creates an orthonormal basis for a subspace of dimension in_d in a space of dimension out_d.
+        :param out_d: dimension of ambient space
+        :param in_d: dimensions in which the data is given
+        :param seed: random seed
+        :return: basis matrix (in_d, out_d)
+        """
+        assert out_d >= in_d
+
+        # create orthogonal normal basis by Gauss elemination procedure from random vectors
+        np.random.seed(seed)
+        basis = np.random.randn(in_d, out_d)
+        for i, _ in enumerate(basis):
+            basis[i] /= np.linalg.norm(basis[i])
+            for j, _ in enumerate(basis):
+                if j <= i:
+                    continue
+                basis[j] = basis[j] - np.dot(basis[i], basis[j]) * basis[i]
+                assert np.allclose(
+                    np.dot(basis[i], basis[j]), 0
+                )  # check that the vectors are orthogonal
+        return basis
+
+    def linear_embedding(self, X, target_dim, noise_hd=0.01):
+        """
+        Embed 2D data into higher dimensions using random linear projection.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, 2)
+            2D input data
+        target_dim : int
+            Target embedding dimension (must be >= 2)
+        noise_hd : float
+            Standard deviation of Gaussian noise in additional dimensions
+
+        Returns
+        -------
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded data
+        projection_matrix : ndarray of shape (target_dim, 2)
+            The random projection matrix used
+        """
+        if target_dim < 2:
+            raise ValueError("target_dim must be at least 2")
+
+        # Generate random orthonormal basis using QR decomposition
+        random_matrix = self.rng.randn(target_dim, target_dim)
+        basis, _ = np.linalg.qr(random_matrix)
+
+        # Embed: use first 2 basis vectors for the 2D data
+        # X_embedded = X @ basis[:2, :].T preserves distances since basis is orthonormal
+        X_embedded = X @ basis[:2, :]
+
+        X_embedded_unnoised = (
+            X_embedded.copy()
+        )  # Keep a copy before adding noise for potential analysis
+
+        # proj = self.get_orthonormal_basis(out_d=target_dim, in_d=2)
+
+        # # Project into high-dimensional space
+        # X_embedded = X @ proj
+
+        # Add high-dimensional noise to all dimensions
+        if noise_hd > 0:
+            X_embedded += self.rng.normal(0, noise_hd, X_embedded.shape)
+
+        return X_embedded, X_embedded_unnoised, basis[:2, :]
+
+    def nonlinear_embedding(
+        self, X, target_dim, noise_hd=0.01, embedding_type="polynomial"
+    ):
+        """
+        Embed 2D data nonlinearly into higher dimensions while preserving distances.
+
+        Uses the approach of embedding into a higher-dimensional feature space,
+        then centering and normalizing to preserve relative distance structure.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, 2)
+            2D input data
+        target_dim : int
+            Target embedding dimension (must be >= 2)
+        noise_hd : float
+            Standard deviation of Gaussian noise in additional dimensions
+        embedding_type : str
+            Type of nonlinear embedding: 'polynomial', 'trigonometric', or 'mixed'
+
+        Returns
+        -------
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded data
+        """
+        n_samples = X.shape[0]
+
+        # Compute pairwise distances in original space
+        from scipy.spatial.distance import pdist, squareform
+
+        original_distances = squareform(pdist(X))
+
+        # Create initial nonlinear features
+        features = [X]  # Start with original coordinates
+
+        if embedding_type == "polynomial":
+            # Add polynomial features up to degree 3
+            features.append(X**2)
+            features.append(X[:, [0]] * X[:, [1]])  # interaction term
+            features.append(X**3)
+
+        elif embedding_type == "trigonometric":
+            # Add trigonometric features
+            for freq in range(1, 4):
+                features.append(np.sin(freq * X))
+                features.append(np.cos(freq * X))
+
+        elif embedding_type == "mixed":
+            # Combine polynomial and trigonometric
+            features.append(X**2)
+            features.append(np.sin(X))
+            features.append(np.cos(X))
+            features.append(X[:, [0]] * X[:, [1]])
+
+        # Concatenate all features
+        X_features = np.hstack(features)
+
+        # If we have more features than target_dim, use PCA to reduce
+        # If we have fewer, pad with random projections
+        if X_features.shape[1] > target_dim:
+            from sklearn.decomposition import PCA
+
+            pca = PCA(n_components=target_dim)
+            X_embedded = pca.fit_transform(X_features)
+        else:
+            X_embedded = np.zeros((n_samples, target_dim))
+            X_embedded[:, : X_features.shape[1]] = X_features
+            # Fill remaining with small random projections
+            if target_dim > X_features.shape[1]:
+                remaining = target_dim - X_features.shape[1]
+                proj = self.rng.randn(2, remaining) * 0.1
+                X_embedded[:, X_features.shape[1] :] = X @ proj
+
+        # Scale to match original distance structure
+        embedded_distances = squareform(pdist(X_embedded))
+        # Use median distance ratio to scale (robust to outliers)
+        orig_median = np.median(original_distances[original_distances > 0])
+        embed_median = np.median(embedded_distances[embedded_distances > 0])
+
+        if embed_median > 0:
+            scale_factor = orig_median / embed_median
+            X_embedded *= scale_factor
+
+        X_embedded_unnoised = (
+            X_embedded.copy()
+        )  # Keep a copy before adding noise for potential analysis
+
+        # Add high-dimensional noise
+        if noise_hd > 0:
+            X_embedded += self.rng.normal(0, noise_hd, X_embedded.shape)
+
+        return X_embedded, X_embedded_unnoised
+
+    def generate_dataset(
+        self,
+        target_dim,
+        radius=1.0,
+        noise_2d=0.05,
+        noise_hd=0.01,
+        embedding="linear",
+        **kwargs,
+    ):
+        """
+        Generate complete dataset: circle in 2D embedded in high dimensions.
+
+        Parameters
+        ----------
+        target_dim : int
+            Target embedding dimension
+        radius : float
+            Radius of the circle
+        noise_2d : float
+            Noise level in the original 2D circle
+        noise_hd : float
+            Noise level in the high-dimensional embedding
+        embedding : str
+            'linear' or 'nonlinear' (or specific type for nonlinear)
+        **kwargs : dict
+            Additional arguments passed to embedding functions
+
+        Returns
+        -------
+        X_2d : ndarray of shape (n_samples, 2)
+            Original 2D circle data
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded high-dimensional data
+        metadata : dict
+            Dictionary containing embedding parameters and matrices
+        """
+        # Generate 2D circle
+        X_2d = self.generate_circle_2d(radius=radius, noise_2d=noise_2d)
+
+        # Embed into high dimensions
+        metadata = {
+            "radius": radius,
+            "noise_2d": noise_2d,
+            "noise_hd": noise_hd,
+            "target_dim": target_dim,
+            "embedding_type": embedding,
+        }
+
+        if embedding == "linear":
+            X_embedded, X_embedded_unnoised, proj = self.linear_embedding(
+                X_2d, target_dim, noise_hd
+            )
+            metadata["projection_matrix"] = proj
+        else:
+            embedding_type = kwargs.get("embedding_type", "polynomial")
+            X_embedded, X_embedded_unnoised = self.nonlinear_embedding(
+                X_2d, target_dim, noise_hd, embedding_type
+            )
+            metadata["nonlinear_type"] = embedding_type
+
+        return X_2d, X_embedded, X_embedded_unnoised, metadata
+
+    def visualize(self, X_2d, X_embedded, metadata):
+        """
+        Visualize the original 2D data and PCA projection of embedded data.
+
+        Parameters
+        ----------
+        X_2d : ndarray
+            Original 2D data
+        X_embedded : ndarray
+            High-dimensional embedded data
+        metadata : dict
+            Embedding metadata
+        """
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+        # Original 2D circle
+        axes[0].scatter(X_2d[:, 0], X_2d[:, 1], alpha=0.6, s=20)
+        axes[0].set_xlabel("X1")
+        axes[0].set_ylabel("X2")
+        axes[0].set_title("Original 2D Circle")
+        axes[0].axis("equal")
+        axes[0].grid(True, alpha=0.3)
+
+        # PCA projection of embedded data (back to 2D for visualization)
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(X_embedded)
+
+        axes[1].scatter(X_pca[:, 0], X_pca[:, 1], alpha=0.6, s=20)
+        axes[1].set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.2%})")
+        axes[1].set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.2%})")
+        axes[1].set_title(f'PCA of {metadata["target_dim"]}D Embedding')
+        axes[1].axis("equal")
+        axes[1].grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        return fig
+
+
+class TorusEmbedding:
+    """
+    Generate noisy 2-tori in 3D and embed them into high-dimensional spaces.
+
+    This class provides methods for:
+    - Generating a 3D torus point cloud
+    - Linear embeddings (random projection)
+    - Nonlinear embeddings (polynomial features)
+    - Controlled noise in both low (3D) and high dimensions
+    """
+
+    def __init__(self, n_samples=1000, seed=42):
+        """
+        Parameters
+        ----------
+        n_samples : int
+            Number of points to sample from the torus.
+            (Note: More points are generally needed for a torus than a circle)
+        seed : int
+            Random seed for reproducibility
+        """
+        self.n_samples = n_samples
+        self.seed = seed
+        self.rng = np.random.RandomState(seed)
+
+    def generate_torus_3d(self, major_radius=2.0, minor_radius=1.0, noise_3d=0.05):
+        """
+        Generate a noisy torus in 3D.
+
+        Parameters
+        ----------
+        major_radius : float
+            Radius from the center of the hole to the center of the tube (R)
+        minor_radius : float
+            Radius of the tube (r)
+        noise_3d : float
+            Standard deviation of Gaussian noise added to torus points
+
+        Returns
+        -------
+        X : ndarray of shape (n_samples, 3)
+            Points sampled from noisy torus
+        """
+        # Sample two sets of angles uniformly
+        theta = self.rng.uniform(0, 2 * np.pi, self.n_samples)
+        phi = self.rng.uniform(0, 2 * np.pi, self.n_samples)
+
+        # Generate torus points using parametric equations
+        x = (major_radius + minor_radius * np.cos(phi)) * np.cos(theta)
+        y = (major_radius + minor_radius * np.cos(phi)) * np.sin(theta)
+        z = minor_radius * np.sin(phi)
+
+        X = np.column_stack([x, y, z])
+
+        # Add noise in 3D
+        if noise_3d > 0:
+            X += self.rng.normal(0, noise_3d, X.shape)
+
+        return X
+
+    def linear_embedding(self, X, target_dim, noise_hd=0.01):
+        """
+        Embed 3D data into higher dimensions using random linear projection.
+
+        This is an isometric embedding (preserves distances) up to noise.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, 3)
+            3D input data
+        target_dim : int
+            Target embedding dimension (must be >= 3)
+        noise_hd : float
+            Standard deviation of Gaussian noise in all high dimensions
+
+        Returns
+        -------
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded data
+        projection_matrix : ndarray of shape (3, target_dim)
+            The random projection matrix used
+        """
+        if target_dim < 3:
+            raise ValueError("target_dim must be at least 3")
+
+        # Generate random orthonormal basis using QR decomposition
+        random_matrix = self.rng.randn(target_dim, target_dim)
+        basis, _ = np.linalg.qr(random_matrix)
+
+        # Use the first 3 basis vectors (as rows) for the 3D data
+        # X is (n_samples, 3). basis[:3, :] is (3, target_dim).
+        # X @ basis[:3, :] maps (x, y, z) to x*v_1 + y*v_2 + z*v_3
+        projection_matrix = basis[:3, :]
+        X_embedded = X @ projection_matrix
+
+        # Add high-dimensional noise to all dimensions
+        if noise_hd > 0:
+            X_embedded += self.rng.normal(0, noise_hd, X_embedded.shape)
+
+        return X_embedded, projection_matrix
+
+    def nonlinear_embedding(
+        self, X, target_dim, noise_hd=0.01, embedding_type="polynomial"
+    ):
+        """
+        Embed 3D data nonlinearly into higher dimensions.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, 3)
+            3D input data
+        target_dim : int
+            Target embedding dimension
+        noise_hd : float
+            Standard deviation of Gaussian noise in additional dimensions
+        embedding_type : str
+            Type of nonlinear embedding: 'polynomial', 'trigonometric', or 'mixed'
+
+        Returns
+        -------
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded data
+        """
+        n_samples = X.shape[0]
+
+        # Compute pairwise distances in original space
+        original_distances = squareform(pdist(X))
+
+        # Create initial nonlinear features
+        features = [X]  # Start with original coordinates (x, y, z)
+
+        if embedding_type == "polynomial":
+            # Add polynomial features up to degree 3
+            features.append(X**2)  # x^2, y^2, z^2
+            # Interaction terms
+            features.append(X[:, [0]] * X[:, [1]])  # xy
+            features.append(X[:, [0]] * X[:, [2]])  # xz
+            features.append(X[:, [1]] * X[:, [2]])  # yz
+            features.append(X**3)  # x^3, y^3, z^3
+
+        elif embedding_type == "trigonometric":
+            # Add trigonometric features
+            for freq in range(1, 3):  # Keep feature count reasonable
+                features.append(np.sin(freq * X))
+                features.append(np.cos(freq * X))
+
+        elif embedding_type == "mixed":
+            # Combine polynomial and trigonometric
+            features.append(X**2)
+            features.append(np.sin(X))
+            features.append(np.cos(X))
+            features.append(X[:, [0]] * X[:, [1]])
+            features.append(X[:, [0]] * X[:, [2]])
+
+        # Concatenate all features
+        X_features = np.hstack(features)
+
+        # If we have more features than target_dim, use PCA to reduce
+        # If we have fewer, pad with random projections
+        if X_features.shape[1] > target_dim:
+            pca = PCA(n_components=target_dim, random_state=self.seed)
+            X_embedded = pca.fit_transform(X_features)
+        else:
+            X_embedded = np.zeros((n_samples, target_dim))
+            X_embedded[:, : X_features.shape[1]] = X_features
+            # Fill remaining with small random projections
+            if target_dim > X_features.shape[1]:
+                remaining = target_dim - X_features.shape[1]
+                proj = self.rng.randn(3, remaining) * 0.1  # Project from 3D
+                X_embedded[:, X_features.shape[1] :] = X @ proj
+
+        # Scale to match original distance structure
+        embedded_distances = squareform(pdist(X_embedded))
+        orig_median = np.median(original_distances[original_distances > 0])
+        embed_median = np.median(embedded_distances[embedded_distances > 0])
+
+        if embed_median > 0 and orig_median > 0:
+            scale_factor = orig_median / embed_median
+            X_embedded *= scale_factor
+
+        # Add high-dimensional noise
+        if noise_hd > 0:
+            X_embedded += self.rng.normal(0, noise_hd, X_embedded.shape)
+
+        return X_embedded
+
+    def generate_dataset(
+        self,
+        target_dim,
+        major_radius=2.0,
+        minor_radius=1.0,
+        noise_3d=0.05,
+        noise_hd=0.01,
+        embedding="linear",
+        **kwargs,
+    ):
+        """
+        Generate complete dataset: torus in 3D embedded in high dimensions.
+
+        Parameters
+        ----------
+        target_dim : int
+            Target embedding dimension
+        major_radius : float
+            Major radius of the torus
+        minor_radius : float
+            Minor radius of the torus
+        noise_3d : float
+            Noise level in the original 3D torus
+        noise_hd : float
+            Noise level in the high-dimensional embedding
+        embedding : str
+            'linear' or 'nonlinear'
+        **kwargs : dict
+            Additional arguments passed to embedding functions
+
+        Returns
+        -------
+        X_3d : ndarray of shape (n_samples, 3)
+            Original 3D torus data
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded high-dimensional data
+        metadata : dict
+            Dictionary containing embedding parameters
+        """
+        # Generate 3D torus
+        X_3d = self.generate_torus_3d(
+            major_radius=major_radius, minor_radius=minor_radius, noise_3d=noise_3d
+        )
+
+        # Embed into high dimensions
+        metadata = {
+            "major_radius": major_radius,
+            "minor_radius": minor_radius,
+            "noise_3d": noise_3d,
+            "noise_hd": noise_hd,
+            "target_dim": target_dim,
+            "embedding_type": embedding,
+        }
+
+        if embedding == "linear":
+            X_embedded, proj = self.linear_embedding(X_3d, target_dim, noise_hd)
+            metadata["projection_matrix"] = proj
+        else:
+            embedding_type = kwargs.get("embedding_type", "polynomial")
+            X_embedded = self.nonlinear_embedding(
+                X_3d, target_dim, noise_hd, embedding_type
+            )
+            metadata["nonlinear_type"] = embedding_type
+
+        return X_3d, X_embedded, metadata
+
+
+class CurvyLoopEmbedding:
+    """
+    Generate noisy circles in 2D and embed them into high-dimensional spaces.
+
+    This class provides methods for:
+    - Linear embeddings (random projection)
+    - Nonlinear embeddings (polynomial features)
+    - Controlled noise in both low and high dimensions
+    """
+
+    def __init__(self, n_samples=200, seed=42):
+        """
+        Parameters
+        ----------
+        n_samples : int
+            Number of points to sample from the circle
+        seed : int
+            Random seed for reproducibility
+        """
+        self.n_samples = n_samples
+        self.seed = seed
+        self.rng = np.random.RandomState(seed)
+
+    def generate_highdim_loop(self, n_planes=3, radius=1.0, noise=0.05):
+        """
+        Generate a loop that curves through multiple high-dimensional planes.
+
+        Creates a parametric curve (topologically S^1) using Lissajous curves with
+        carefully chosen frequency ratios that create complex, self-intersecting
+        projections. No 2D projection reveals the simple loop structure.
+
+        Parameters
+        ----------
+        n_planes : int
+            Number of 2D planes to wind through (dimension = 2 * n_planes)
+        radius : float
+            Approximate radius scale
+        noise : float
+            Standard deviation of Gaussian noise
+
+        Returns
+        -------
+        X : ndarray of shape (n_samples, 2*n_planes)
+            Points sampled from the high-dimensional loop
+        metadata : dict
+            Information about the construction
+        """
+        theta = np.linspace(0, 2 * np.pi, self.n_samples, endpoint=False)
+
+        # Dimension of the ambient space
+        dim = 2 * n_planes
+        X = np.zeros((self.n_samples, dim))
+
+        # Use high, coprime frequencies to create dense Lissajous curves
+        # These should create figures with many self-intersections
+        # Pattern: use coprime pairs like (3,5), (5,7), (7,11), (11,13), (13,17)
+        coprime_pairs = [
+            (1, 2),
+            (1, 3),
+            (1, 4),
+            (1, 5),
+            (2, 3),
+            (2, 5),
+            (3, 4),  # (3, 5), (4, 5),
+            # (5, 7), (3, 7)# (7, 11), (11, 13), (13, 17),
+            # (17, 19), (19, 23), (23, 29), (29, 31), (31, 37)
+        ]
+        freq_pairs = []
+        phases = []
+
+        for i in range(n_planes):
+            # freq_x, freq_y = prime_pairs[i % len(prime_pairs)]
+            freq_x, freq_y = coprime_pairs.pop(self.rng.randint(len(coprime_pairs)))
+            freq_pairs.append((freq_x, freq_y))
+
+            # Different phase for each plane
+            phase = i * 0.314  # Use golden ratio for phases
+            phases.append(phase)
+
+            X[:, 2 * i] = np.cos(freq_x * theta + phase)
+            X[:, 2 * i + 1] = np.sin(
+                freq_y * theta + phase + 0.2
+            )  # sqrt(2) for y phase
+
+        # Scale to desired radius
+        current_scale = np.sqrt(np.mean(np.sum(X**2, axis=1)))
+        if current_scale > 0:
+            X = (radius * X) / current_scale
+
+        # Add noise
+        if noise > 0:
+            X += self.rng.normal(0, noise, X.shape)
+
+        metadata = {
+            "n_planes": n_planes,
+            "dimension": dim,
+            "radius": radius,
+            "noise": noise,
+            "frequency_pairs": freq_pairs,
+            "phases": phases,
+        }
+
+        return X, metadata
+
+    def linear_embedding(self, X, target_dim, noise_hd=0.01):
+        """
+        Embed data into higher dimensions using random orthonormal basis.
+
+        This creates a random orthonormal basis for R^target_dim and embeds
+        the data into the first k basis vectors (where k is the dimension of X),
+        preserving distances.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, k)
+            Input data (k-dimensional)
+        target_dim : int
+            Target embedding dimension (must be >= k)
+        noise_hd : float
+            Standard deviation of Gaussian noise in additional dimensions
+
+        Returns
+        -------
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded data
+        basis : ndarray of shape (target_dim, target_dim)
+            The random orthonormal basis used
+        """
+        k = X.shape[1]  # Original dimension
+
+        if target_dim < k:
+            raise ValueError(f"target_dim must be at least {k}")
+
+        # Generate random orthonormal basis using QR decomposition
+        random_matrix = self.rng.randn(target_dim, target_dim)
+        basis, _ = np.linalg.qr(random_matrix)
+
+        # Embed: use first k basis vectors for the k-dimensional data
+        # X_embedded = X @ basis[:k, :].T preserves distances since basis is orthonormal
+        X_embedded = X @ basis[:k, :]
+
+        # Add high-dimensional noise to all dimensions
+        if noise_hd > 0:
+            X_embedded += self.rng.normal(0, noise_hd, X_embedded.shape)
+
+        return X_embedded, basis
+
+    def generate_dataset(
+        self,
+        target_dim,
+        radius=1.0,
+        noise_2d=0.05,
+        noise_hd=0.01,
+        embedding="linear",
+        dataset_type="circle",
+        **kwargs,
+    ):
+        """
+        Generate complete dataset: geometric object embedded in high dimensions.
+
+        Parameters
+        ----------
+        target_dim : int
+            Target embedding dimension
+        radius : float
+            Radius parameter for the geometric object
+        noise_2d : float
+            Noise level in the original low-dimensional object
+        noise_hd : float
+            Noise level in the high-dimensional embedding
+        embedding : str
+            'linear' or 'nonlinear' (or specific type for nonlinear)
+        dataset_type : str
+            Type of geometric object: 'circle', 'torus', 'linked_circles', or 'highdim_loop'
+        **kwargs : dict
+            Additional arguments:
+            - For torus: major_radius, minor_radius, noise_3d
+            - For linked_circles: separation, noise_hd_full, noise_hd_partial,
+              partial_dims_fraction
+            - For highdim_loop: n_planes (number of 2D planes to wind through)
+            - For nonlinear: embedding_type
+
+        Returns
+        -------
+        X_low : ndarray
+            Original low-dimensional data
+        X_embedded : ndarray of shape (n_samples, target_dim)
+            Embedded high-dimensional data
+        metadata : dict
+            Dictionary containing embedding parameters and matrices
+        """
+        metadata = {
+            "target_dim": target_dim,
+            "embedding_type": embedding,
+            "dataset_type": dataset_type,
+        }
+
+        # Generate low-dimensional geometric object
+        n_planes = kwargs.get("n_planes", 3)
+        noise = kwargs.get("noise", noise_2d)
+
+        X_low, loop_metadata = self.generate_highdim_loop(
+            n_planes=n_planes, radius=radius, noise=noise
+        )
+        metadata.update(loop_metadata)
+        labels = None
+
+        # For highdim_loop, X_low is already high-dimensional
+        # We may need to embed it further if target_dim > X_low.shape[1]
+        if target_dim > X_low.shape[1]:
+            # Embed the already-high-dimensional loop into even higher dimensions
+            X_embedded, basis = self.linear_embedding(X_low, target_dim, noise_hd)
+            metadata["noise_hd"] = noise_hd
+            metadata["basis"] = basis
+            return X_low, X_embedded, metadata
+        elif target_dim == X_low.shape[1]:
+            # No further embedding needed, just add noise
+            X_embedded = X_low.copy()
+            if noise_hd > 0:
+                X_embedded += self.rng.normal(0, noise_hd, X_embedded.shape)
+            metadata["noise_hd"] = noise_hd
+            return X_low, X_embedded, metadata
+        else:
+            raise ValueError(
+                f"target_dim ({target_dim}) must be >= {X_low.shape[1]} for highdim_loop"
+            )
+
+        # Embed into high dimensions (for non-highdim_loop datasets)
+        metadata["noise_hd"] = noise_hd
+        X_embedded, basis = self.linear_embedding(X_low, target_dim, noise_hd)
+        metadata["basis"] = basis
+
+        return X_low, X_embedded, metadata
+
+
+def umap_embedding(X, target_dim=3, n_neighbors=15, min_dist=0.1, random_state=42):
+    """
+    Embed high-dimensional data into a lower-dimensional space using UMAP.
+
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples, n_features)
+        High-dimensional input data
+    target_dim : int
+        Target embedding dimension (e.g., 2 or 3)
+    n_neighbors : int
+        Number of neighbors for UMAP
+    min_dist : float
+        Minimum distance parameter for UMAP
+    random_state : int
+        Random seed for reproducibility
+
+    Returns
+    -------
+    X_embedded : ndarray of shape (n_samples, target_dim)
+        UMAP embedding of the input data
+    """
+    import umap
+
+    reducer = umap.UMAP(
+        n_components=target_dim,
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        random_state=random_state,
+    )
+    X_embedded = reducer.fit_transform(X)
+    return X_embedded
+
+
+def get_eff_res_spectral(adj, k=100):
+    """
+    Approximates EffR using the bottom k eigenvectors of the Laplacian.
+    Scales O(n * k).
+    """
+    import scipy.sparse as sp
+    from scipy.sparse.linalg import eigsh
+
+    n = adj.shape[0]
+    degs = np.array(adj.sum(axis=1)).flatten()
+    L = sp.diags(degs) - adj
+
+    # Get the smallest k+1 eigenvalues/vectors (first is always 0)
+    # We use 'SM' (Smallest Magnitude)
+    vals, vecs = eigsh(L, k=k + 1, which="SM")
+
+    # Drop the first trivial eigenvalue
+    vals = vals[1:]
+    vecs = vecs[:, 1:]
+
+    # L_pinv approximation = U * Lambda^-1 * U^T
+    # To get R_ij = L_ii + L_jj - 2*L_ij, we treat rows of (U * Lambda^-0.5)
+    # as coordinates in a Euclidean space.
+    embedding = vecs / np.sqrt(vals)
+
+    return embedding
+
+
+def compute_laplacian(A, normalization="none"):
+    """
+    Computes the Laplacian based ona an adjacency matrix given as np.ndarray or scipy.sparse matrix. Based on code by
+    Enrique Fita Sanmartin.
+
+    :param A: adjacency matrix given as np.ndarray or scipy.sparse matrix
+    :param normalization: whether to use no normalization ("none"), random walk normalization ("rw") or symmetric normalization ("sym")
+    :return: Laplacian matrix in the same format as A
+    """
+    # compute degree matrix
+    degs = A.sum(0)
+    if isinstance(A, np.ndarray):
+        D = np.diag(degs.flatten())
+    else:
+        D = scipy.sparse.diags(np.asarray(degs).reshape(-1), format="csc")
+
+    # compute non-normalized Laplacian
+    L = D - A
+
+    if normalization != "none":
+        assert degs.min() > 0, "Graph contains nodes with zero degree."
+
+        if normalization == "rw":
+            if isinstance(A, np.ndarray):
+                D_inv = np.diag(degs.flatten() ** (-1))
+            else:
+                D_inv = scipy.sparse.diags(
+                    np.asarray(degs).reshape(-1) ** (-1), format="csc"
+                )
+            L = D_inv @ L
+        elif normalization == "sym":
+            if isinstance(A, np.ndarray):
+                D_inv_sqrt = np.diag(degs.flatten() ** (-0.5))
+            else:
+                D_inv_sqrt = scipy.sparse.diags(
+                    np.asarray(degs).reshape(-1) ** (-0.5), format="csc"
+                )
+            L = D_inv_sqrt @ L @ D_inv_sqrt
+        else:
+            raise NotImplementedError
+    return L
+
+
+def compute_effective_resistance_connected(A):
+    """
+    Computes the effective resistance using the pseudoinverse of the Laplacian L^+ of a connected graph.
+
+    EffR[i,j]=L^+[i,i]+L^+[j,j]-2*L^+[i,j]
+
+    Based on code by Enrique Fita Sanmartin.
+
+    :param A: adjacency matrix (numpy or scipy.sparse array)
+    :return: all pairs of effective resistance distances (numpy array)
+    """
+
+    n = A.shape[0]
+    L = compute_laplacian(A)
+    if not isinstance(L, np.ndarray):
+        L = L.toarray()
+
+    Lpinv = np.linalg.inv(L + np.ones(L.shape) / n) - np.ones(L.shape) / n
+
+    Linv_diag = np.diag(Lpinv).reshape((n, 1))
+    EffR = Linv_diag * np.ones((1, n)) + np.ones((n, 1)) * Linv_diag.T - 2 * Lpinv
+
+    return EffR
+
+
+def compute_effective_resistance(A, disconnect=False):
+    if disconnect:
+        # compute connected components
+        n_components, component_labels = scipy.sparse.csgraph.connected_components(A)
+        EffR = (
+            np.ones(A.shape) * np.inf
+        )  # initialize EffR matrix to inf for correct value between connected components
+
+        for i in range(n_components):
+            component_mask = component_labels == i
+            component = np.where(component_mask)[0]
+            component_mask = component_mask[:, None] @ component_mask[None, :]
+            if scipy.sparse.issparse(A):
+                A = A.tocsr()
+            # compute effective resistance on component
+            EffR_component = compute_effective_resistance_connected(
+                A[component, :][:, component]
+            )  # funny slicing for sparse matrices
+            EffR[component_mask] = EffR_component.flatten()
+
+    else:
+        EffR = compute_effective_resistance_connected(A)
+
+    print(EffR)
+    # replace infinite values with twice the maximal finite value
+    max_EffR = np.max(EffR[np.isfinite(EffR)])
+    EffR[np.isinf(EffR)] = max_EffR * 2
+    return EffR
+
+
+def correct_eff_res(d, adj):
+    degs = np.array(adj.sum(axis=1))
+    deg_dist = 1 / degs + 1 / degs.T
+    np.fill_diagonal(deg_dist, 0)
+    return d - deg_dist + 2 * adj.toarray() / (degs * degs.T)
+
+
+def get_eff_res(X, k, corrected=True):
+    sknn_coo = (
+        pynndescent.PyNNDescentTransformer(n_neighbors=k, metric="euclidean")
+        .fit_transform(X)
+        .tocoo()
+    )
+
+    # invert as edge weights are reciprocal of resistance
+    # sknn_coo.data = 1 / sknn_coo.data
+    sknn_coo.data = np.ones_like(sknn_coo.data)  # unweighted graph
+    # sknn_coo.data = np.exp(
+    #     -(sknn_coo.data - sknn_coo.data.min()) / sknn_coo.data.std()
+    # )  # convert to similarity
+    sknn_coo = sknn_coo.maximum(sknn_coo.T)  # make symmetric
+    print(sknn_coo.data)
+
+    # compute effective resistance
+    d_eff = compute_effective_resistance(sknn_coo, disconnect=True)
+
+    # optionally: correct via von Luxburg fix
+    if corrected:
+        d_eff = correct_eff_res(d_eff, sknn_coo)
+
+    return d_eff
+
+
+def effective_resistance_distance_embedding(X, target_dim=3):
+    """
+    Embed high-dimensional data into a lower-dimensional space using effective resistance distance.
+
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples, n_features)
+        High-dimensional input data
+    target_dim : int
+        Target embedding dimension (e.g., 2 or 3)
+
+    Returns
+    -------
+    X_embedded : ndarray of shape (n_samples, target_dim)
+        Embedding based on effective resistance distance
+    """
+    import umap
+
+    # Extract UMAPs graph and compute effective resistance distance
+    reducer = umap.UMAP(transform_mode="graph", random_state=42)
+    adj = reducer.fit_transform(X)
+    embedding = get_eff_res_spectral(adj, k=target_dim)
+
+    return embedding

@@ -211,11 +211,20 @@ __marimo__/
 slides/
 media/
 slide_states/
+slides_720p30/
+slides_1080p60/
 
 # Large data files
 *.npy
 evoc_tmls_assets/
 Summary_assets/
+rr2026/assets/
+visxai/mnist_cache/
+visxai/quickdraw_cache/
+visxai/world_cache/
+visxai/*.mp4
+visxai/build_logs/
+*.npz
 
 # Output files
 *.pptx

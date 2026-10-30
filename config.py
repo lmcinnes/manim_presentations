@@ -1,5 +1,7 @@
 from manim import *
+from manim.utils.color.core import color_to_int_rgb
 from manim_slides import Slide, ThreeDSlide
+from functools import lru_cache
 import json
 import os
 import pickle
@@ -8,6 +10,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import mixbox
 
 # Your color palette
 DEFAULT_COLOR = ManimColor("#2c3e63")
@@ -35,6 +38,13 @@ DEFAULT_TEX_TEMPLATE.tex_compiler = "xelatex"
 DEFAULT_TEX_TEMPLATE.output_format = ".xdv"
 DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\usepackage{fontspec}")
 DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\setmainfont{Marcellus}")
+
+HEADING_FONT = "Marcellus SC"
+HEADING_TEX_TEMPLATE = TexTemplate()
+HEADING_TEX_TEMPLATE.tex_compiler = "xelatex"
+HEADING_TEX_TEMPLATE.output_format = ".xdv"
+HEADING_TEX_TEMPLATE.add_to_preamble(r"\usepackage{fontspec}")
+HEADING_TEX_TEMPLATE.add_to_preamble(r"\setmainfont{" + HEADING_FONT + "}")
 
 # ============================================================================
 # AXES DEFAULTS
@@ -67,6 +77,7 @@ def apply_defaults():
     Mobject.set_default(color=DEFAULT_COLOR)
     Text.set_default(color=DEFAULT_COLOR, font=DEFAULT_FONT)
     Tex.set_default(tex_template=DEFAULT_TEX_TEMPLATE, color=DEFAULT_COLOR)
+    MathTex.set_default(tex_template=DEFAULT_TEX_TEMPLATE, color=DEFAULT_COLOR)
 
     print("Custom Manim configuration applied ✓")
 
@@ -86,6 +97,244 @@ def colormap_color(value, vmin, vmax, cmap_name="plasma", power=1.0, invert=Fals
         normalized = 1.0 - normalized
     rgba = plt.get_cmap(cmap_name)(normalized**power)
     return rgb_to_color(rgba[:3])
+
+
+def mixbox_interpolate_color(color1, color2, t):
+    mix_color = mixbox.lerp(color_to_int_rgb(color1), color_to_int_rgb(color2), t)
+    return ManimColor(mix_color)
+
+
+# Cyclic colour wheel (blue -> purple -> pink -> orange -> green -> cyan),
+# shared by every slide that colours points by position around a loop.
+T_CYCLE = [COLOR_CYCLE[i] for i in (0, 4, 3, 1, 2, 5)]
+
+
+def cyclic_color(u):
+    """u in [0, 1) -> ManimColor mixed (mixbox) around T_CYCLE."""
+    x = (u % 1.0) * len(T_CYCLE)
+    i = int(np.floor(x)) % len(T_CYCLE)
+    return mixbox_interpolate_color(T_CYCLE[i], T_CYCLE[(i + 1) % len(T_CYCLE)], x - i)
+
+
+def cyclic_rgba(t):
+    """Angles t (radians, array) -> (n, 4) RGBA floats mixed around T_CYCLE,
+    for PMobject point colours."""
+    stops = [c.to_rgb() for c in T_CYCLE]
+    u = (np.asarray(t, float) % (2 * np.pi)) / (2 * np.pi) * len(T_CYCLE)
+    i = np.floor(u).astype(int) % len(T_CYCLE)
+    a = u - np.floor(u)
+    rgb = np.array(
+        [
+            mixbox.lerp_float(stops[k], stops[(k + 1) % len(T_CYCLE)], w)
+            for k, w in zip(i, a)
+        ]
+    ).reshape(-1, 3)
+    return np.hstack([rgb, np.ones((len(rgb), 1))])
+
+
+# ============================================================================
+# POINT CLOUDS (PMobject, Cairo renderer)
+# ============================================================================
+# Cairo's Camera.display_point_cloud draws each point as a block of
+# int(stroke_width) x int(stroke_width) pixels: a little square, at a size
+# fixed in pixels whatever the render resolution. Call install_round_points()
+# once per module (after apply_defaults()) to draw filled discs instead, and
+# size points with res_px() so they look the same at -ql and -qh.
+REF_PIXEL_HEIGHT = 1440  # resolution that res_px() sizes are tuned for
+
+
+def res_px(px_at_ref: float) -> float:
+    """Scale a pixel size tuned at REF_PIXEL_HEIGHT to the current resolution."""
+    return px_at_ref * config.pixel_height / REF_PIXEL_HEIGHT
+
+
+@lru_cache(maxsize=None)
+def _circular_nudges(thickness: int) -> np.ndarray:
+    c = (thickness - 1) / 2  # disc centre (on a half pixel for even sizes)
+    k = np.arange(thickness)
+    dy, dx = np.meshgrid(k, k, indexing="ij")
+    keep = (dy - c) ** 2 + (dx - c) ** 2 <= (thickness / 2) ** 2
+    return np.c_[dy[keep], dx[keep]] - (thickness - 1) // 2
+
+
+def make_circular_nudges(thickness: float) -> np.ndarray:
+    """Pixel-nudge offsets forming a filled disc (round PMobject points).
+
+    Always at least one pixel, so tiny (res_px-scaled) points never vanish.
+    """
+    # the epsilon stops e.g. res_px(...) == 4.9999999 truncating to 4
+    return _circular_nudges(max(int(thickness + 1e-6), 1))
+
+
+def _display_point_cloud_point_major(
+    self, pmobject, points, rgbas, thickness, pixel_array
+):
+    """Drop-in replacement for Camera.display_point_cloud.
+
+    Stock Cairo writes nudge-major (every point's first pixel, then every
+    point's second pixel, ...), so where discs overlap they interleave
+    pixel by pixel. Writing point-major gives true painter's order: later
+    points fully cover earlier ones.
+    """
+    if len(points) == 0:
+        return
+    pixel_coords = self.points_to_pixel_coords(pmobject, points)
+    nudges = self.get_thickening_nudges(thickness)
+    pixel_coords = (pixel_coords[:, None, :] + nudges[None, :, :]).reshape(-1, 2)
+
+    rgba_len = pixel_array.shape[2]
+    rgbas = (self.rgb_max_val * rgbas).astype(self.pixel_array_dtype)
+    rgbas = np.repeat(rgbas, len(nudges), axis=0)
+
+    on_screen = self.on_screen_pixels(pixel_coords)
+    pixel_coords = pixel_coords[on_screen]
+    rgbas = rgbas[on_screen]
+
+    ph, pw = self.pixel_height, self.pixel_width
+    indices = (pixel_coords[:, 0] + pw * pixel_coords[:, 1]).astype("int")
+    flat = pixel_array.reshape((ph * pw, rgba_len))
+    flat[indices] = rgbas
+    pixel_array[:, :] = flat.reshape((ph, pw, rgba_len))
+
+
+_ORIGINAL_THICKENING_NUDGES = Camera.get_thickening_nudges
+_ORIGINAL_DISPLAY_POINT_CLOUD = Camera.display_point_cloud
+
+
+def install_round_points(round_points=True, point_major=True):
+    """Patch the Cairo camera (2D and 3D) to draw PMobject points as discs,
+    layered in point order. Pass False to restore the stock behaviour."""
+    Camera.get_thickening_nudges = (
+        (lambda self, thickness: make_circular_nudges(thickness))
+        if round_points
+        else _ORIGINAL_THICKENING_NUDGES
+    )
+    Camera.display_point_cloud = (
+        _display_point_cloud_point_major
+        if point_major
+        else _ORIGINAL_DISPLAY_POINT_CLOUD
+    )
+
+
+# Cairo writes PMobject colours straight into the pixel array with no alpha
+# compositing, so FadeIn / FadeOut (which animate opacity) make clouds pop in
+# and out. These blend RGB towards / from the background instead, and leave
+# the cloud's updaters running so it can move while it fades.
+class PMRecolor(Animation):
+    """Blend a PMobject's point colours from their current values to
+    ``target_rgb`` (a colour, a (3,) array, or an (N, 3) array)."""
+
+    def __init__(self, mob: PMobject, target_rgb, **kwargs):
+        target = target_rgb
+        if not isinstance(target, np.ndarray):
+            target = np.asarray(color_to_rgb(target), dtype=np.float64)
+        self._target_rgb = np.broadcast_to(
+            np.asarray(target, dtype=np.float64), (len(mob.rgbas), 3)
+        ).copy()
+        kwargs.setdefault("suspend_mobject_updating", False)
+        super().__init__(mob, **kwargs)
+
+    def create_starting_mobject(self):
+        return Mobject()  # unused; avoids deep-copying large clouds
+
+    def begin(self):
+        self._start_rgb = self.mobject.rgbas[:, :3].copy()
+        self.mobject.rgbas[:, 3] = 1.0
+        super().begin()
+
+    def interpolate_mobject(self, alpha: float) -> None:
+        self.mobject.rgbas[:, :3] = (
+            1.0 - alpha
+        ) * self._start_rgb + alpha * self._target_rgb
+
+
+def _background_rgb():
+    return np.asarray(color_to_rgb(config.background_color), dtype=np.float64)
+
+
+class PMFadeOut(PMRecolor):
+    """FadeOut for a PMobject: blend it into the background, then remove it.
+    Its colours are restored afterwards, so it can be added again later."""
+
+    def __init__(self, mob: PMobject, **kwargs):
+        kwargs.setdefault("remover", True)
+        super().__init__(mob, _background_rgb(), **kwargs)
+
+    def clean_up_from_scene(self, scene):
+        super().clean_up_from_scene(scene)
+        self.mobject.rgbas[:, :3] = self._start_rgb
+
+
+class PMFadeIn(PMRecolor):
+    """FadeIn for a PMobject: blend it in from the background. It is added to
+    the scene when played, and set to the background colour straight away so
+    it cannot pop in before the animation starts."""
+
+    def __init__(self, mob: PMobject, **kwargs):
+        target = mob.rgbas[:, :3].copy()
+        mob.rgbas[:, :3] = _background_rgb()
+        kwargs.setdefault("introducer", True)
+        super().__init__(mob, target, **kwargs)
+
+
+# ============================================================================
+# SMALL TEXT
+# ============================================================================
+# Marcellus kerns badly when Pango renders it small, so Text is always built
+# at TEXT_BUILD_SIZE and scaled down. TeX output is unaffected, but at equal
+# font_size it comes out TEX_TO_TEXT times the size of Text.
+TEXT_BUILD_SIZE = 48
+TEX_TO_TEXT = 0.75
+
+HEADING_TITLE_SIZE = 28.8
+HEADING_SUBTITLE_SIZE = 15.36
+
+
+def SmallText(text, font_size=TEXT_BUILD_SIZE, **kwargs):
+    """Text, built at 48pt and scaled to font_size. Text with newlines
+    becomes a centred Paragraph."""
+    if "\n" in text:
+        mob = Paragraph(
+            *text.split("\n"), font_size=TEXT_BUILD_SIZE, alignment="center", **kwargs
+        )
+    else:
+        mob = Text(text, font_size=TEXT_BUILD_SIZE, **kwargs)
+    return mob.scale(font_size / TEXT_BUILD_SIZE)
+
+
+def SmallTex(text, font_size=DEFAULT_FONT_SIZE, **kwargs):
+    """Text with inline maths ($...$) in the slide font; newlines are centred
+    line breaks (each line in an \\mbox so TeX does not re-wrap it).
+    font_size is a Tex font size (see TEX_TO_TEXT)."""
+    lines = [r"\mbox{" + line + "}" for line in text.split("\n")]
+    return Tex(r"\\ ".join(lines), font_size=font_size, **kwargs)
+
+
+def make_heading(
+    title,
+    subtitle=None,
+    title_tex=False,
+    subtitle_tex=False,
+    title_color=DEFAULT_COLOR,
+    subtitle_color=ACCENT_COLOR,
+):
+    """Standard slide heading: title (in HEADING_FONT) at the top, optional
+    subtitle below. Use *_tex=True for strings containing inline maths."""
+
+    def build(text, size, color, use_tex, is_title):
+        if use_tex:
+            kw = {"tex_template": HEADING_TEX_TEMPLATE} if is_title else {}
+            return SmallTex(text, font_size=size / TEX_TO_TEXT, color=color, **kw)
+        kw = {"font": HEADING_FONT} if is_title else {}
+        return SmallText(text, font_size=size, color=color, **kw)
+
+    t = build(title, HEADING_TITLE_SIZE, title_color, title_tex, True)
+    t.to_edge(UP, buff=0.3)
+    if subtitle is None:
+        return VGroup(t)
+    s = build(subtitle, HEADING_SUBTITLE_SIZE, subtitle_color, subtitle_tex, False)
+    s.next_to(t, DOWN, buff=0.12)
+    return VGroup(t, s)
 
 
 def create_standard_axes(x_range=[-1, 10, 1], y_range=[-1, 10, 1], **kwargs):
@@ -197,6 +446,8 @@ def create_styled_axes(
             "include_tip": True,
             "color": DEFAULT_COLOR,
             "tip_shape": StealthTip,
+            "tip_height": 0.1,
+            "tip_width": 0.1,
         },
         y_axis_config={
             "numbers_to_include": (
@@ -265,6 +516,11 @@ def create_styled_axes(
 # ===========================================================================
 
 
+# How far past the frame edge a section title wipes away: stopping exactly at
+# the edge leaves an antialiased sliver of the title card on screen.
+SECTION_WIPE_OVERSHOOT = 0.2
+
+
 class _TIMCMixin:
     """
     Shared implementation for TIMCSlide (2D) and ThreeDTIMCSlide (3D).
@@ -305,6 +561,17 @@ class _TIMCMixin:
         self.add_centered_text(text, **kwargs)
         self.marked_next_slide()
         self.clear_slide(run_time=clear_run_time)
+
+    def _section_break(self, **kwargs):
+        """marked_next_slide(**kwargs), unless nothing has played since the
+        last break: that would make an empty slide (an extra click), so the
+        options are applied to the slide already started instead.
+        (Reads manim-slides' private slide-tracking state.)"""
+        if self._current_animation > self._start_animation:
+            self.marked_next_slide(**kwargs)
+        else:
+            for key, value in kwargs.items():
+                setattr(self._base_slide_config, key, value)
 
     # ------------------------------------------------------------------
     # Camera state
@@ -485,8 +752,16 @@ class _TIMCMixin:
         )
         return VGroup(background, section_title)
 
-    def new_section(self, section_name, next_slide_prep=None, pause_at_title=True):
-        self.marked_next_slide()
+    def new_section(
+        self, section_name, next_slide_prep=None, pause_at_title=True, auto_next=False
+    ):
+        """Wipe a section title down over the slide, then back up.
+
+        auto_next: advance to the next slide on its own once the title has
+        wiped away (at the end of a scene that flows into the next scene).
+        """
+        lead = {"auto_next": True} if auto_next and not pause_at_title else {}
+        self._section_break(**lead)
 
         section_slide = self._build_section_slide(section_name)
         section_slide.move_to(UP * config.frame_height)
@@ -498,7 +773,7 @@ class _TIMCMixin:
         self.wait(0.1)
 
         if pause_at_title:
-            self.next_slide()
+            self.next_slide(auto_next=auto_next)
         else:
             self.wait()
 
@@ -509,7 +784,9 @@ class _TIMCMixin:
             next_slide_prep()
 
         self.play(
-            section_slide.animate.shift(UP * config.frame_height),
+            section_slide.animate.shift(
+                UP * (config.frame_height + SECTION_WIPE_OVERSHOOT)
+            ),
             run_time=1,
         )
 
@@ -539,7 +816,9 @@ class _TIMCMixin:
             next_slide_prep()
 
         self.play(
-            section_slide.animate.shift(UP * config.frame_height),
+            section_slide.animate.shift(
+                UP * (config.frame_height + SECTION_WIPE_OVERSHOOT)
+            ),
             run_time=1,
         )
 
@@ -725,10 +1004,28 @@ class _TIMCMixin:
         )
 
     def clear_slide(self, animation=FadeOut, run_time=1):
-        self.play(
-            *[animation(mobject) for mobject in self.mobjects if mobject != self.logo],
-            run_time=run_time,
-        )
+        """Fade out everything but the logo. Point clouds (PMobjects), also
+        inside groups, get PMFadeOut, as FadeOut cannot fade them in Cairo."""
+        anims, emptied = [], []
+        for mobject in self.mobjects:
+            if mobject == self.logo:
+                continue
+            family = mobject.get_family()
+            if animation is not FadeOut or not any(
+                isinstance(m, PMobject) for m in family
+            ):
+                anims.append(animation(mobject))
+            elif isinstance(mobject, PMobject) and len(family) == 1:
+                anims.append(PMFadeOut(mobject))
+            else:
+                # fade the leaves one by one, then drop the emptied group
+                for leaf in (m for m in family if not m.submobjects):
+                    anims.append(
+                        PMFadeOut(leaf) if isinstance(leaf, PMobject) else FadeOut(leaf)
+                    )
+                emptied.append(mobject)
+        self.play(*anims, run_time=run_time)
+        self.remove(*emptied)
 
 
 # ===========================================================================
@@ -780,8 +1077,12 @@ class ThreeDTIMCSlide(_TIMCMixin, ThreeDSlide):
 
     # --- 3D-specific section wipes ---
 
-    def new_section(self, section_name, next_slide_prep=None, pause_at_title=True):
-        self.marked_next_slide()
+    def new_section(
+        self, section_name, next_slide_prep=None, pause_at_title=True, auto_next=False
+    ):
+        """See _TIMCMixin.new_section."""
+        lead = {"auto_next": True} if auto_next and not pause_at_title else {}
+        self._section_break(**lead)
 
         section_slide = self._build_section_slide(section_name)
         section_slide.move_to(UP * config.frame_height)
@@ -793,7 +1094,7 @@ class ThreeDTIMCSlide(_TIMCMixin, ThreeDSlide):
         )
 
         if pause_at_title:
-            self.next_slide()
+            self.next_slide(auto_next=auto_next)
         else:
             self.wait()
 
@@ -804,7 +1105,9 @@ class ThreeDTIMCSlide(_TIMCMixin, ThreeDSlide):
             next_slide_prep()
 
         self.play(
-            section_slide.animate.shift(UP * config.frame_height),
+            section_slide.animate.shift(
+                UP * (config.frame_height + SECTION_WIPE_OVERSHOOT)
+            ),
             run_time=1,
         )
 
