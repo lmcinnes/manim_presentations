@@ -222,6 +222,8 @@ rr2026/assets/
 visxai/mnist_cache/
 visxai/quickdraw_cache/
 visxai/world_cache/
+visxai/visxai_assets/
+visxai/visxai.html
 visxai/*.mp4
 visxai/build_logs/
 *.npz
