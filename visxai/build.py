@@ -17,7 +17,10 @@ are in the config block below. Both are meant to be edited by hand.
 
 Slides made with next_slide(auto_next=True) -- e.g. a scene's closing fade,
 so it runs straight into the next scene -- are given a timed advance in the
-pptx (manim-slides' own pptx converter ignores auto_next).
+pptx (manim-slides' own pptx converter ignores auto_next). The html output
+handles auto_next natively; it is built with reveal.js' autoSlideStoppable
+off, so clicking during an auto-advancing slide doesn't disable auto_next
+for the rest of the talk.
 """
 
 import argparse
@@ -255,6 +258,14 @@ def convert(args, entries):
         *scenes,
         args.output,
     ]
+    if args.to == "html":
+        # reveal.js honours auto_next (data-autoslide) itself, but by default
+        # any key/click during an auto-advancing slide pauses auto-sliding for
+        # the rest of the talk; keep it on so a click just advances early.
+        opts = ["auto_slide=false"] if args.no_auto_next else []
+        opts.append("auto_slide_stoppable=false")
+        for opt in opts:
+            cmd[-1:-1] = ["-c", opt]
     if run(cmd, args.dry_run) != 0:
         sys.exit("conversion failed")
 
@@ -344,7 +355,7 @@ def main():
     g.add_argument(
         "--no-auto-next",
         action="store_true",
-        help="leave auto_next slides waiting for a click in the pptx (pptx only)",
+        help="leave auto_next slides waiting for a click (pptx and html)",
     )
     g.add_argument(
         "--shrink",

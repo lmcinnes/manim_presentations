@@ -71,7 +71,7 @@ class QuickDrawNearestNeighbourSlide(NearestNeighbourEdgeSlide):
         return (
             f"{self.caption(name_i).capitalize()} and "
             f"{self.caption(name_j)}: nearest neighbours",
-            "closest doodle in DINOv2 space, from opposite ends of the map",
+            "closest doodle in DINOv2 space, from distinct classes",
         )
 
     def outro(self):
