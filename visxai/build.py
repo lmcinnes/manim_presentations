@@ -9,6 +9,7 @@ manim-slides, convert to a PowerPoint deck, and (optionally) shrink it.
     python build.py --quality l -j 8     # quick low-quality draft, 8 in parallel
     python build.py --shrink             # also write visxai-small.pptx
     python build.py --no-auto-next       # every slide waits for a click
+    python build.py --to html            # write visxai.html instead of a pptx
     python build.py --dry-run            # just print the commands
 
 The slide order lives in slide_sequence.txt; the prep steps and output names
@@ -76,7 +77,9 @@ PREP_STEPS = [
 
 SEQUENCE_FILE = "slide_sequence.txt"
 SLIDES_DIR = "slides"  # where manim-slides render writes (fixed by manim-slides)
-OUTPUT_PPTX = "visxai.pptx"
+OUTPUT_NAME = "visxai"  # output is <OUTPUT_NAME>.<format extension>
+# manim-slides convert formats -> file extension
+FORMATS = {"pptx": "pptx", "html": "html", "pdf": "pdf", "zip": "zip"}
 SHRINK_SCRIPT = "../shrink_pptx.py"
 AUTO_NEXT_SCRIPT = "../pptx_auto_next.py"
 LOG_DIR = "build_logs"
@@ -246,7 +249,7 @@ def convert(args, entries):
         "manim-slides",
         "convert",
         "--to",
-        "pptx",
+        args.to,
         "--folder",
         SLIDES_DIR,
         *scenes,
@@ -328,20 +331,26 @@ def main():
     g = p.add_argument_group("output")
     g.add_argument("--no-convert", action="store_true", help="stop after rendering")
     g.add_argument(
+        "--to",
+        choices=list(FORMATS),
+        default="pptx",
+        help="output format for manim-slides convert (default: pptx)",
+    )
+    g.add_argument(
         "-o",
         "--output",
-        default=OUTPUT_PPTX,
-        help=f"pptx to write (default: {OUTPUT_PPTX})",
+        help=f"file to write (default: {OUTPUT_NAME}.<ext of --to>)",
     )
     g.add_argument(
         "--no-auto-next",
         action="store_true",
-        help="leave auto_next slides waiting for a click in the pptx",
+        help="leave auto_next slides waiting for a click in the pptx (pptx only)",
     )
     g.add_argument(
         "--shrink",
         action="store_true",
-        help=f"run {SHRINK_SCRIPT} on the pptx (writes <name>-small.pptx)",
+        help=f"run {SHRINK_SCRIPT} on the pptx (writes <name>-small.pptx; "
+        "pptx only)",
     )
     g.add_argument(
         "--shrink-args",
@@ -354,6 +363,8 @@ def main():
         "--dry-run", action="store_true", help="print the commands without running them"
     )
     args = p.parse_args()
+    if args.output is None:
+        args.output = f"{OUTPUT_NAME}.{FORMATS[args.to]}"
 
     os.chdir(HERE)
     entries = read_sequence(SEQUENCE_FILE)
@@ -365,10 +376,13 @@ def main():
         render(args, entries)
     if not args.no_convert:
         convert(args, entries)
-        if not args.no_auto_next:
-            auto_next(args, entries)
-        if args.shrink:
-            shrink(args)
+        if args.to == "pptx":
+            if not args.no_auto_next:
+                auto_next(args, entries)
+            if args.shrink:
+                shrink(args)
+        elif args.shrink:
+            log(f"--shrink only applies to pptx: skipping for --to {args.to}")
     log("done")
 
 

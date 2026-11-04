@@ -107,7 +107,7 @@ class NoiseInHighDimensions(TIMCSlide):
         )
         move = MathTex(
             r"\mathbb{E}\,\lVert \sigma z_i \rVert^{2} \;=\; "
-            r"\sigma^{2} D \qquad \Longrightarrow \qquad "
+            r"\sigma^{2} D \qquad \implies \qquad "
             r"\lVert \sigma z_i \rVert \;\approx\; \sigma\sqrt{D}",
             font_size=48,
         ).move_to(0.4 * UP)

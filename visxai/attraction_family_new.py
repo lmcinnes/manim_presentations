@@ -262,7 +262,7 @@ class AttractionFamily(TIMCSlide):
         scale_eq = MathTex(
             r"\lambda = \tfrac{1}{v}, \quad "
             r"\sigma_0 = \sqrt[m]{v/c}"
-            r"\quad\Longrightarrow\quad "
+            r"\quad\implies\quad "
             r"q = e^{-(d/\sigma_0)^{m}}",
             font_size=34,
         ).next_to(spring, DOWN, buff=0.55)
