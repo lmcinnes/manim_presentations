@@ -743,12 +743,24 @@ class _TIMCMixin:
         )
         background.set_sheen_direction(UP)
         background.set_fill(color=[DEFAULT_COLOR, ACCENT_COLOR, WHITE], opacity=1)
-        section_title = Paragraph(
+        # section_title = Paragraph(
+        #     section_name,
+        #     font_size=72,
+        #     color=WHITE,
+        #     alignment="center",
+        #     font="Marcellus SC",
+        # )
+        section_title = self.add_centered_text(
             section_name,
+            max_width=0.85,
+            max_height=0.7,
             font_size=72,
-            color=WHITE,
-            alignment="center",
+            line_spacing=1.1,
+            t2c=None,
+            animate=False,
+            location=ORIGIN,
             font="Marcellus SC",
+            color=WHITE,
         )
         return VGroup(background, section_title)
 

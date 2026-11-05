@@ -25,6 +25,7 @@ high_dimensions.py EquatorBandArea
 # high_dimensions.py ExampleCircleEmbeddingConstruction
 
 # ---- nearest neighbours in real data ----
+mnist_knn_slides.py NearestNeighbourIntro
 mnist_knn_slides.py MNISTNearestNeighbourSlide
 quickdraw_knn_slides.py QuickDrawNearestNeighbourSlide
 

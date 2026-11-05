@@ -139,8 +139,8 @@ class WorldProjections(ThreeDTIMCSlide):
 
     GLOBE_CAMERA = dict(phi=72 * DEGREES, theta=-90 * DEGREES)
     FLAT_CAMERA = dict(phi=90 * DEGREES, theta=-90 * DEGREES)
-    SPIN_RATE = 0.9
-    STEP_SECONDS = 2.5  # each stage of an unwrapping
+    SPIN_RATE = 1.5
+    STEP_SECONDS = 1.75  # each stage of an unwrapping
 
     # ---- data ------------------------------------------------------------
     def setup_data(self):

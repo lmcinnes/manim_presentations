@@ -388,7 +388,9 @@ class SwissRollWhyUnroll(SwissRollStory):
     natural flat picture."""
 
     POINT_SIZE = 6.7  # pixels at 1440p
-    SPIN_RATE = 1.0
+    SPIN_RATE = 3.0
+    UNROLL_SECONDS = 1.25
+    PLACE_SECONDS = 0.75
 
     def construct(self):
 
@@ -409,7 +411,7 @@ class SwissRollWhyUnroll(SwissRollStory):
             "Classic Swiss-Roll data",
             "",
         )
-        self.play(PMFadeIn(cloud), run_time=1.5)
+        self.play(PMFadeIn(cloud), run_time=1.0)
         self.add(cloud)
         self.marked_next_slide()
         self.spin_once()
@@ -451,35 +453,36 @@ class SwissRollWhyUnroll(SwissRollStory):
             run_time=self.UNROLL_SECONDS,
             rate_func=smooth,
         )
-        self.marked_next_slide()
-
-        # ---- the unrolled sheet's coordinates ----
-        P = self.sheet_positions(self._sheet_s, self._sheet_h)
-        x0, x1 = P[:, 0].min(), P[:, 0].max()
-        z0, z1 = P[:, 2].min(), P[:, 2].max()
-        along = Arrow3D(
-            [x0, 0, z0 - 0.35], [x1, 0, z0 - 0.35], color=DEFAULT_COLOR, thickness=0.015
-        )
-        up = Arrow3D(
-            [x0 - 0.35, 0, z0], [x0 - 0.35, 0, z1], color=DEFAULT_COLOR, thickness=0.015
-        )
-        lab_along = SmallText(
-            "position along the roll  (hue)", font_size=23.76, color=DEFAULT_COLOR
-        ).move_to([0, 0, z0 - 0.75])
-        lab_up = SmallText(
-            "height  (lightness)", font_size=23.76, color=DEFAULT_COLOR
-        ).move_to([x0 + 0.9, 0, z1 + 0.4])
-        self.add_fixed_orientation_mobjects(lab_along, lab_up)
-        head = self.swap_heading(
-            head,
-            "With implicit coordinates",
-            "",
-            Create(along),
-            Create(up),
-            FadeIn(lab_along, lab_up),
-        )
         self.marked_next_slide(auto_next=True)
         self.clear_slide()
+
+        # # ---- the unrolled sheet's coordinates ----
+        # P = self.sheet_positions(self._sheet_s, self._sheet_h)
+        # x0, x1 = P[:, 0].min(), P[:, 0].max()
+        # z0, z1 = P[:, 2].min(), P[:, 2].max()
+        # along = Arrow3D(
+        #     [x0, 0, z0 - 0.35], [x1, 0, z0 - 0.35], color=DEFAULT_COLOR, thickness=0.015
+        # )
+        # up = Arrow3D(
+        #     [x0 - 0.35, 0, z0], [x0 - 0.35, 0, z1], color=DEFAULT_COLOR, thickness=0.015
+        # )
+        # lab_along = SmallText(
+        #     "position along the roll  (hue)", font_size=23.76, color=DEFAULT_COLOR
+        # ).move_to([0, 0, z0 - 0.75])
+        # lab_up = SmallText(
+        #     "height  (lightness)", font_size=23.76, color=DEFAULT_COLOR
+        # ).move_to([x0 + 0.9, 0, z1 + 0.4])
+        # self.add_fixed_orientation_mobjects(lab_along, lab_up)
+        # head = self.swap_heading(
+        #     head,
+        #     "With implicit coordinates",
+        #     "",
+        #     Create(along),
+        #     Create(up),
+        #     FadeIn(lab_along, lab_up),
+        # )
+        # self.marked_next_slide(auto_next=True)
+        # self.clear_slide()
 
 
 # ---------------------------------------------------------------------------

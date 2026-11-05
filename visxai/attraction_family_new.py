@@ -255,14 +255,14 @@ class AttractionFamily(TIMCSlide):
         ).move_to(LEFT_CENTRE + 0.9 * UP)
         spring = tex(
             "$-\\log q = \\lambda c\\, d^{\\,m}$ grows without "
-            "limit:\na spring — the pull grows with distance",
+            "limit:\na spring where the pull grows with distance",
             24,
             KNOWN_COLOR,
         ).next_to(known, DOWN, buff=0.4)
         scale_eq = MathTex(
             r"\lambda = \tfrac{1}{v}, \quad "
             r"\sigma_0 = \sqrt[m]{v/c}"
-            r"\quad\implies\quad "
+            r"\: \: \implies\: \: "
             r"q = e^{-(d/\sigma_0)^{m}}",
             font_size=34,
         ).next_to(spring, DOWN, buff=0.55)
@@ -329,7 +329,7 @@ class AttractionFamily(TIMCSlide):
         )
         unknown = tex(
             "and we don't know the density: with noise and "
-            "corruption\nit isn't even one fixed number",
+            "corruption\nit is uncertain what the density should be at any point",
             22,
             ACCENT_COLOR,
         ).move_to(LEFT_CENTRE + 2.55 * DOWN)
@@ -379,9 +379,9 @@ class AttractionFamily(TIMCSlide):
         self.marked_next_slide()
 
         integral = MathTex(
-            r"q(d) \;=\; \int_0^\infty e^{-\lambda\, c\, d^{\,m}}\;"
+            r"q(d) = \int_0^\infty e^{-\lambda\, c\, d^{\,m}}\;"
             r"\mathrm{Gamma}(\lambda;\ \alpha,\ \alpha v)\; d\lambda",
-            font_size=36,
+            font_size=34,
         ).move_to(LEFT_CENTRE + 0.15 * DOWN)
         result = MathTex(
             r"q(d) \;=\; \Big(1 + \tfrac{1}{\alpha}"

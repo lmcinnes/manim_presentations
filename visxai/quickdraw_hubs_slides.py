@@ -60,7 +60,7 @@ DATA_FILE = Path(os.environ.get("QUICKDRAW_HUBS", _HERE / "quickdraw_hubs.npz"))
 PAIRS = [
     (5064, 5858),  # mushroom / mushroom
     (6748, 6311),  # cloud / cloud
-    (1440, 1139),  # bicycle / bicycle
+    #    (1440, 1139),  # bicycle / bicycle
 ]
 # PAIRS = None  # None = the prep's top N_PAIRS_DEFAULT pairs
 N_PAIRS_DEFAULT = 3
@@ -80,7 +80,7 @@ N_SHOW = 8  # pointers shown as images per hub
 IMAGE_SIZE = 0.52
 IMAGE_GAP = 0.2  # wide enough for class-name labels
 HUB_GAP = 0.3  # between the hub's image and its pointers
-LABEL_FONT_SIZE = 11.5
+LABEL_FONT_SIZE = 11
 PANEL_LEFT = 0.0  # x where the image rows start
 GOOD_ROW_Y, BAD_ROW_Y = 0.9, -1.9
 
@@ -232,6 +232,14 @@ class QuickDrawHubsSlide(TIMCSlide):
 
     # ---- scene -----------------------------------------------------------
     def construct(self):
+
+        self.add_centered_text("Hubs can be good or bad")
+        self.marked_next_slide()
+        self.clear_slide()
+        self.add_centered_text("And it can be hard to tell the difference")
+        self.marked_next_slide()
+        self.clear_slide()
+
         self.load()
 
         points = self.build_points()
@@ -245,7 +253,7 @@ class QuickDrawHubsSlide(TIMCSlide):
         ).move_to(PLOT_CENTER)
 
         head = self.heading(
-            "Hubs in clean Quick, Draw! doodles",
+            "Hubs in Quick, Draw! doodles",
             f"UMAP of {len(self.y):,} doodles embedded with DINOv2 "
             "(no added noise), coloured by class",
         )
@@ -325,8 +333,8 @@ class QuickDrawHubsSlide(TIMCSlide):
 
         # --- take-home message ---
         new = self.heading(
-            "Hubs happen even without noise",
-            "in a clean, learned embedding; good and bad hubs look alike locally",
+            "Hubs happen",
+            "in a learned embedding; good and bad hubs look alike locally",
         )
         self.play(FadeTransform(head, new), FadeOut(veil))
         self.marked_next_slide()

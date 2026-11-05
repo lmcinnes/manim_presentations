@@ -288,9 +288,7 @@ class KernelKnobs(TIMCSlide):
         self.marked_next_slide()
 
         def note(text, color, pos):
-            return SmallText(text, font_size=22, color=color, line_spacing=0.8).move_to(
-                pos
-            )
+            return Tex(text, font_size=22, color=color).move_to(pos)
 
         # Each arrow leaves the middle of one edge of its note (from_dir) and
         # arrives at one side of its parameter (to_dir); the bend (angle,
@@ -306,9 +304,8 @@ class KernelKnobs(TIMCSlide):
                 sigma_in,
                 [],
                 SIGMA_COLOR,
-                "units: the typical distance to a nearest\n"
-                "neighbour — it rescales the whole layout,\n"
-                "and nothing else",
+                "units: the typical distance to a nearest\\\\ \n"
+                "neighbour (the scale of the layout)",
                 [-4.2, -2.3, 0],
                 RIGHT,
                 DOWN,
@@ -318,9 +315,9 @@ class KernelKnobs(TIMCSlide):
                 m_in,
                 [],
                 M_COLOR,
-                "target intrinsic dimension: how\n"
-                "space-filling the layout should be —\n"
-                "1: compact clusters,  2: fills the plane",
+                "target intrinsic dimension: how\\\\ \n"
+                "space-filling the layout should be:\\\\ \n"
+                "stringy clusters $\\longleftrightarrow$ filling the space",
                 [4.3, 2.35, 0],
                 DOWN,
                 UP,
@@ -330,9 +327,9 @@ class KernelKnobs(TIMCSlide):
                 alpha_in,
                 [alpha_ex],
                 ALPHA_COLOR,
-                "certainty about the local density —\n"
-                "large: density known, a spring;\n"
-                "small: sceptical, long edges explained away",
+                "certainty about the local density:\\\\ \n"
+                "density known $\\longrightarrow$ a spring;\\\\ \n"
+                "sceptical $\\longrightarrow$ long edges explained away",
                 [-4.05, 2.35, 0],
                 RIGHT,
                 UP,
@@ -342,9 +339,9 @@ class KernelKnobs(TIMCSlide):
                 alpha_ex,
                 [],
                 TAIL_COLOR,
-                "together, m and alpha set the tail:\n"
-                "a long edge pulls like  m alpha / d —\n"
-                "how hard a long, possibly spurious,\n"
+                "together, m and alpha set the tail:\\\\ \n"
+                "a long edge pulls like  $m \\alpha / d$\\\\ \n"
+                "how hard a long, possibly spurious,\\\\ \n"
                 "edge can pull: the denoising dial",
                 [4.3, -2.35, 0],
                 UP,

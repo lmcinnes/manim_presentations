@@ -50,6 +50,22 @@ class KNNSlidesIntro(TIMCSlide):
         self.clear_slide()
 
 
+class NearestNeighbourIntro(TIMCSlide):
+
+    def construct(self):
+        self.add_centered_text("Are there examples of pathology in real data?")
+        self.marked_next_slide()
+        self.clear_slide()
+
+        self.add_centered_text("Short distances were trustworthy right?")
+        self.marked_next_slide()
+        self.clear_slide()
+
+        self.add_centered_text("Nearest neighbours should be reliable...")
+        self.marked_next_slide()
+        self.clear_slide()
+
+
 class MNISTNearestNeighbourSlide(NearestNeighbourEdgeSlide):
     DATA_FILE = Path(os.environ.get("MNIST_KNN", _HERE / "mnist_knn.npz"))
     SHOWCASE_EDGES = [

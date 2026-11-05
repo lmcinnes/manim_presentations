@@ -137,6 +137,18 @@ def zigzag(a, b, coils=7, amp=0.05, lead=0.12):
     return pts + [a + s1 * u, b]
 
 
+class DrawIn(Create):
+    """Create, with the stroke fading in over the first part. A plain Create
+    starts from zero-length strokes, which still render as dots (end caps)."""
+
+    def interpolate_submobject(self, submobject, starting_submobject, alpha):
+        super().interpolate_submobject(submobject, starting_submobject, alpha)
+        submobject.set_stroke(
+            opacity=starting_submobject.get_stroke_opacity() * min(1, alpha / 0.15),
+            family=False,
+        )
+
+
 def icon_tile(content, color=ACCENT_COLOR, size=QUESTION_TILE, pad=0.13, intro=None):
     """content fitted onto a rounded, gradient-filled tile with a soft shadow.
     intro(content) -> animation for the content (default: FadeIn)."""
@@ -162,8 +174,14 @@ def icon_tile(content, color=ACCENT_COLOR, size=QUESTION_TILE, pad=0.13, intro=N
     intro = intro or (lambda c: FadeIn(c))
 
     def tile_intro():
+        # An empty group: otherwise Scene.play adds the mobjects of every
+        # non-introducer sub-animation (MoveToTarget, Rotate, ...) up front,
+        # fully visible. Pieces are added by their own FadeIn / DrawIn.
         return LaggedStart(
-            FadeIn(VGroup(shadow, bg), scale=0.85), intro(content), lag_ratio=0.35
+            FadeIn(VGroup(shadow, bg), scale=0.85),
+            intro(content),
+            lag_ratio=0.35,
+            group=Group(),
         )
 
     tile.intro = tile_intro
@@ -226,14 +244,17 @@ def icon_roll():
     s1, s2 = 2.0 * np.pi, 4.0 * np.pi  # adjacent layers
     chord = glow(Line(p(s1), p(s2)).set_stroke(STRESS_COLOR, 3), STRESS_COLOR)
     ends = VGroup(
-        *[shaded_disc(0.045, STRESS_COLOR, p(s), n=4, highlight=False) for s in (s1, s2)]
+        *[
+            shaded_disc(0.045, STRESS_COLOR, p(s), n=4, highlight=False)
+            for s in (s1, s2)
+        ]
     )
     content = VGroup(spiral, chord, ends)
 
     def intro(c):
         return Succession(
-            Create(spiral, run_time=0.8),
-            AnimationGroup(Create(chord), FadeIn(ends, scale=0.3), run_time=0.5),
+            DrawIn(spiral, run_time=0.8),
+            AnimationGroup(DrawIn(chord), FadeIn(ends, scale=0.3), run_time=0.5),
         )
 
     return icon_tile(content, STRESS_COLOR, LADDER_TILE, intro=intro)
@@ -265,17 +286,15 @@ def icon_concentration():
     starts = rng.uniform(0.25, 1.6, len(finals))
 
     def intro(c):
-        moves = []
-        for n_, s in zip(nbrs, starts):
-            n_.generate_target()
-            n_.move_to(
-                centre.get_center() + s * (n_.get_center() - centre.get_center())
-            )
-            moves.append(MoveToTarget(n_))
+        o = centre.get_center()
+        moves = [
+            FadeIn(n_, target_position=o + s * (n_.get_center() - o))
+            for n_, s in zip(nbrs, starts)
+        ]
         return LaggedStart(
             GrowFromCenter(centre),
             AnimationGroup(FadeIn(shell), *moves, run_time=0.9),
-            Create(spokes),
+            DrawIn(spokes),
             lag_ratio=0.4,
         )
 
@@ -293,7 +312,10 @@ def icon_rank():
     """Their rank order: nearer neighbours carry the wrong ranks -- the badges
     shuffle out of order."""
     rings = VGroup(
-        *[DashedVMobject(Circle(radius=rad), num_dashes=22) for rad in (0.14, 0.24, 0.34)]
+        *[
+            DashedVMobject(Circle(radius=rad), num_dashes=22)
+            for rad in (0.14, 0.24, 0.34)
+        ]
     ).set_stroke(ACCENT_COLOR, 1.2, opacity=0.7)
     window = Circle(radius=0.44).set_fill(ACCENT_COLOR, 0.12).set_stroke(width=0)
     slots = [
@@ -302,9 +324,7 @@ def icon_rank():
     ]
     # final: nearest shows 2, middle 3, farthest 1
     labels = ("2", "3", "1")
-    badges = VGroup(
-        *[badge(l, LOST_COLOR).move_to(p) for l, p in zip(labels, slots)]
-    )
+    badges = VGroup(*[badge(l, LOST_COLOR).move_to(p) for l, p in zip(labels, slots)])
     centre = shaded_disc(0.06, DEFAULT_COLOR)
     content = VGroup(window, rings, badges, centre)
 
@@ -315,7 +335,7 @@ def icon_rank():
             b.generate_target()
             b.move_to(pos[j])
         return Succession(
-            AnimationGroup(FadeIn(window), Create(rings), GrowFromCenter(centre)),
+            AnimationGroup(FadeIn(window), DrawIn(rings), GrowFromCenter(centre)),
             LaggedStart(*[FadeIn(b, scale=0.4) for b in badges], lag_ratio=0.25),
             AnimationGroup(*[MoveToTarget(b, path_arc=PI / 2) for b in badges]),
         )
@@ -347,9 +367,9 @@ def icon_shortcut():
         return Succession(
             AnimationGroup(
                 LaggedStart(*[FadeIn(p, scale=0.3) for p in pts], lag_ratio=0.08),
-                Create(edges),
+                DrawIn(edges),
             ),
-            Create(cut, run_time=0.6),
+            DrawIn(cut, run_time=0.6),
         )
 
     return icon_tile(content, SHORTCUT_COLOR, LADDER_TILE, intro=intro)
@@ -369,9 +389,7 @@ def icon_tail():
     light = np.sqrt(2 * np.e) * xs * np.exp(-(xs**2))  # same peak height
     curve = VMobject().set_points_smoothly([to_pt(x, y) for x, y in zip(xs, heavy)])
     curve.set_stroke(shade(KEPT_COLOR, 0.15), 3.5)
-    area = Polygon(
-        to_pt(0, 0), *[to_pt(x, y) for x, y in zip(xs, heavy)], to_pt(4, 0)
-    )
+    area = Polygon(to_pt(0, 0), *[to_pt(x, y) for x, y in zip(xs, heavy)], to_pt(4, 0))
     area.set_fill([tint(KEPT_COLOR, 0.1), tint(KEPT_COLOR, 0.8)], 0.85)
     area.set_sheen_direction(DOWN).set_stroke(width=0)
     ref = DashedVMobject(
@@ -382,8 +400,8 @@ def icon_tail():
 
     def intro(c):
         return Succession(
-            AnimationGroup(Create(ax), Create(ref)),
-            AnimationGroup(Create(curve), FadeIn(area), run_time=0.8),
+            AnimationGroup(DrawIn(ax), DrawIn(ref)),
+            AnimationGroup(DrawIn(curve), FadeIn(area), run_time=0.8),
         )
 
     return icon_tile(content, KEPT_COLOR, (1.2, 0.85), intro=intro)
@@ -458,7 +476,11 @@ def icon_dial():
     base = Line([-0.45, 0.17, 0], [0.45, 0.17, 0]).set_stroke(DEFAULT_COLOR, 1.2)
 
     knobs, pointers, sweeps = VGroup(), VGroup(), []
-    settings = ((SIGMA_COLOR, r"\sigma_0", 0.6), (M_COLOR, "m", -0.5), (ALPHA_COLOR, r"\alpha", 1.3))
+    settings = (
+        (SIGMA_COLOR, r"\sigma_0", 0.6),
+        (M_COLOR, "m", -0.5),
+        (ALPHA_COLOR, r"\alpha", 1.3),
+    )
     for k, (color, sym, ang) in enumerate(settings):
         c = np.array([(k - 1) * 0.4, -0.22, 0])
         ticks = VGroup(
@@ -487,7 +509,7 @@ def icon_dial():
             turns.append(Rotate(pointer, ang + 0.8, about_point=centre))
         return Succession(
             AnimationGroup(
-                Create(base),
+                DrawIn(base),
                 LaggedStart(*[GrowFromEdge(b, DOWN) for b in bars], lag_ratio=0.1),
                 LaggedStart(*[FadeIn(k, scale=0.6) for k in knobs], lag_ratio=0.2),
             ),
@@ -503,9 +525,15 @@ def icon_given_up():
     rng = np.random.default_rng(5)
 
     def cluster(centre, color):
-        ang = np.linspace(0, TAU, 7)[:-1] + rng.uniform(0, TAU) + 0.25 * rng.standard_normal(6)
+        ang = (
+            np.linspace(0, TAU, 7)[:-1]
+            + rng.uniform(0, TAU)
+            + 0.25 * rng.standard_normal(6)
+        )
         rad = 0.12 * (1 + 0.15 * rng.standard_normal(6))
-        P = np.vstack([[0, 0, 0], np.c_[rad * np.cos(ang), rad * np.sin(ang), np.zeros(6)]])
+        P = np.vstack(
+            [[0, 0, 0], np.c_[rad * np.cos(ang), rad * np.sin(ang), np.zeros(6)]]
+        )
         P = P + centre
         pairs = {
             tuple(sorted((i, int(j))))
@@ -837,20 +865,20 @@ class Conclusion(TIMCSlide):
             (
                 icon_noise(),
                 "What is noise in your representation?",
-                "our model was isotropic Gaussian noise —\n"
+                "our toy model was isotropic Gaussian noise:\n"
                 "activations and embeddings almost certainly are not",
             ),
             (
                 icon_dial(),
                 "Can the knobs be set from the data?",
-                "a layout's measured dimension tracks the m you ask for —\n"
-                "but any estimate comes from the same corrupted graph",
+                "We have a lot of things we can tune and they are likely\n"
+                "dataset-dependent. Can we set them from the data directly?\n",
             ),
             (
                 icon_given_up(),
                 "How do we show what a layout gave up?",
-                "it cannot be judged point by point:\n"
-                "good and bad hubs look the same locally",
+                "What we sacrifice is less straightforward than simple intuitions\n"
+                "would suggest. How can we even begin to show these things?",
             ),
         ]
         qs = VGroup()

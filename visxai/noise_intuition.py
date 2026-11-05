@@ -242,6 +242,10 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
         circ.zoom_fn = self.view_zoom.get_value
         self.set_camera_orientation(**FACE_ON)
 
+        self.add_centered_text("Can we make that math intuitive?")
+        self.marked_next_slide()
+        self.clear_slide()
+
         # ---- points and edges (3D) ----
         P0 = circ.display_points(0.0, 0.0)
         # flat dots kept facing the camera (much faster than Dot3D spheres)
@@ -371,12 +375,12 @@ class CircleNoiseIntuition(ThreeDTIMCSlide):
         )
 
         # ---- slide 5: looping spin about the cylinder axis ----
-        self.marked_next_slide(loop=True)
-        self.play(
-            self.spin.animate.increment_value(TAU),
-            run_time=LOOP_SECONDS,
-            rate_func=linear,
-        )
+        # self.marked_next_slide()
+        # self.play(
+        #     self.spin.animate.increment_value(TAU),
+        #     run_time=LOOP_SECONDS,
+        #     rate_func=linear,
+        # )
 
         # ---- slide 6: back to face-on, looking down the noise direction ----
         self.marked_next_slide()

@@ -22,6 +22,7 @@ sys.path.append("..")  # Add parent directory to path to import config
 sys.path.append(".")
 
 from config import (
+    PMFadeOut,
     apply_defaults,
     COLOR_CYCLE,
     DEFAULT_COLOR,
@@ -248,6 +249,11 @@ class CubeHubSlide(ThreeDTIMCSlide):
                 "SEED or STAGES"
             )
 
+        # ---- intro ----
+        self.add_centered_text("Hubs are another pathology of high-dimensional spaces")
+        self.marked_next_slide()
+        self.clear_slide()
+
         self.set_camera_orientation(phi=65 * DEGREES, theta=-50 * DEGREES, zoom=0.78)
         self.begin_ambient_camera_rotation(rate=SPIN_RATE)
 
@@ -283,6 +289,7 @@ class CubeHubSlide(ThreeDTIMCSlide):
         ).set_z_index(1)
         self.add_fixed_orientation_mobjects(mover, ghost)
         self.remove(ghost)
+        self.remove(mover)
 
         self.E = self.edges(1.0)
         by_kind = {}
@@ -320,7 +327,7 @@ class CubeHubSlide(ThreeDTIMCSlide):
             "every point also reaches into the next clouds",
         )
         self.play(Create(self.layers["out"]), run_time=2)
-        self.marked_next_slide()
+        # self.marked_next_slide()
 
         # ---- nudge the point in, in stages ----
         captions = [
@@ -352,5 +359,11 @@ class CubeHubSlide(ThreeDTIMCSlide):
         )
         self.wait(4)
         self.marked_next_slide()
+        self.play(
+            *[PMFadeOut(pm) for pm in clouds],
+            FadeOut(mover),
+            FadeOut(ghost),
+            FadeOut(cube),
+        )
 
         self.new_section("Hubs in Practice?", auto_next=True)
