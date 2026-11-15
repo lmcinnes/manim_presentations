@@ -300,4 +300,9 @@ class NoiseInHighDimensions(TIMCSlide):
         self.play(FadeIn(lead))
         self.marked_next_slide()
 
-        self.new_section("Intuitions for Noise in High Dimensions", auto_next=True)
+        self.new_section("Intuitions for Noise in High Dimensions")
+
+        self.add_centered_text("Can we make that math intuitive?")
+        self.marked_next_slide()
+        self.clear_slide()
+        self.marked_next_slide(auto_next=True)
