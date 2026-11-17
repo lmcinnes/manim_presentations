@@ -179,6 +179,7 @@ class RepairIntro(TIMCSlide):
         self.clear_slide()
         self.add_centered_text("Let's see it in action on a toy example")
         self.marked_next_slide()
+        self.clear_slide()
 
 
 # ---------------------------------------------------------------------------

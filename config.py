@@ -38,6 +38,7 @@ DEFAULT_TEX_TEMPLATE.tex_compiler = "xelatex"
 DEFAULT_TEX_TEMPLATE.output_format = ".xdv"
 DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\usepackage{fontspec}")
 DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\setmainfont{Marcellus}")
+DEFAULT_TEX_TEMPLATE.add_to_preamble(r"\DeclareRobustCommand{\Relbar}{\mathrel{=}}")
 
 HEADING_FONT = "Marcellus SC"
 HEADING_TEX_TEMPLATE = TexTemplate()
